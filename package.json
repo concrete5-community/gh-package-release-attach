@@ -1,0 +1,20 @@
+{
+  "name": "gh-package-release-attach",
+  "version": "1.0.0",
+  "description": "A GitHub Action that automatically creates a ZIP archive containing a ConcreteCMS package and attach it to GitHub releases",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/main.js --minify --no-cache --license licenses.txt"
+  },
+  "author": "Michele Locati <michele@locati.it>",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/exec": "^1.0.0",
+    "@actions/github": "^5.1.1",
+    "php-parser": "^3.1.5"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.36.1"
+  }
+}

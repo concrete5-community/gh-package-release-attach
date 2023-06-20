@@ -1,0 +1,58 @@
+name: Build
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/build.yml"
+      - "src/**.js"
+      - "package-lock.json"
+      - "package.json"
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - "**"
+    paths:
+      - ".github/workflows/build.yml"
+      - "src/**.js"
+      - "package-lock.json"
+      - "package.json"
+
+jobs:
+  build:
+    name: Build action
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install NPM packages
+        run: npm ci
+      - name: Reset dist
+        run: rm -rf ./dist && mkdir dist
+      - name: Build
+        run: npm run build
+      - name: Check changes
+        if: github.event_name == 'push'
+        id: changes-check
+        run: |
+          GIT_OUTPUT="$(git status --porcelain ./dist)"
+          if [ -n "$GIT_OUTPUT" ]; then
+            printf 'Changes detected:\n%s\n' "$GIT_OUTPUT"
+            CHANGES=y
+          else
+            echo 'No changes detected'
+            CHANGES=n
+          fi
+          echo "detected=$CHANGES" >>"$GITHUB_OUTPUT"
+      - name: Commit changes
+        if: github.event_name == 'push' && steps.changes-check.outputs.detected == 'y' 
+        run: |
+          git config user.name 'GitHub Action bot'
+          git config user.email 'concrete-community@googlegroups.com'
+          git add --all dist
+          git commit -m 'Automatic build'
+          git push

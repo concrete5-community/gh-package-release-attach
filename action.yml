@@ -1,0 +1,17 @@
+name: "Attach ZIP to release"
+author: "Michele Locati"
+description: "Automatically create a ZIP archive containing a ConcreteCMS package and attach it to GitHub releases"
+inputs:
+  remove-files:
+    description: "Files to be removed (in addition to the ones marked with export-ignore in .gitattributes)"
+    required: false
+    default: |-
+      composer.json
+      composer.lock
+  keep-files:
+    description: "Files to be kept even if marked with export-ignore in .gitattributes"
+    required: false
+    default: ""
+runs:
+  using: "node16"
+  main: "dist/index.js"
