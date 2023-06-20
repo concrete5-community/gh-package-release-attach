@@ -35,12 +35,50 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-            remove-files: |
-                composer.json
-                composer.lock
-            keep-files: |
-                README.md
+          remove-files: |
+            composer.json
+            composer.lock
+          keep-files: |
+            README.md
 ```
+
+## PHP Version
+
+If your package is compatible with concrete5 v8 and later, you should use PHP 5.5 and Composer v1:
+
+```yaml
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '5.5'
+          tools: composer:v1
+          coverage: none
+```
+
+If your package is compatible with ConcreteCMS v9 and later, you should use PHP 7.3 and Composer v2:
+
+```yaml
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.3'
+          tools: composer:v2
+          coverage: none
+```
+
+Of course, even if your package is compatible with concrete5 8, you can still require that your users have a greater PHP version: if so, set the `Setup PHP` step accordingly.
+
+> **Note**
+> It's a good practice to have a `composer.json` file defining the (minimum) PHP version to be used in production, as in the following example:
+> ```json
+> {
+>     "config": {
+>         "platform": {
+>             "php": "7.3"
+>         }
+>     }
+> }
+> ```
 
 ## Configuring ZIP archive contents with `.gitattributes`
 
