@@ -40,23 +40,16 @@ async function run() {
             const zipFilename = `${packageInfo.pkgHandle}-v${packageInfo.pkgVersion}.zip`;
             const packageZipFile = path.join(temporaryDirectory, zipFilename);
             const zipFileSize = await zipper.createZip(temporaryDirectory, packageInfo.pkgHandle, packageZipFile);
-            const zipFileStream = fs.createReadStream(packageZipFile);
-            try {
-                await client.rest.repos.uploadReleaseAsset({
-                    url: uploadUrl,
-                    headers: {
-                        'content-type': 'application/zip',
-                        'content-length': zipFileSize,
-                    },
-                    name: zipFilename,
-                    file: zipFileStream,
-                });
-            } finally {
-                try {
-                    zipFileStream.close();
-                } catch (_) {
-                }
-            }
+            const zipFileBytes = await fs.promises.readFile(packageZipFile);
+            await client.rest.repos.uploadReleaseAsset({
+                url: uploadUrl,
+                headers: {
+                    'content-type': 'application/zip',
+                    'content-length': zipFileSize,
+                },
+                name: zipFilename,
+                data: zipFileBytes,
+            });
             console.log('ZIP file attached to release');
         } finally {
             try {
