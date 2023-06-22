@@ -28,7 +28,6 @@ async function installComposerDependencies(directory, composerBin, verbose) {
         '--no-dev',
         '--no-progress',
         '--optimize-autoloader',
-        '--ignore-platform-reqs',
         '--ansi',
         '--no-interaction',
         '--no-cache',
