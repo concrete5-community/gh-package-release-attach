@@ -1,40 +1,4 @@
 const fs = require('fs');
-const path = require('path');
-
-function findControllerClass(parent) {
-    let found = undefined;
-    parent?.children?.some((child) => {
-        if (child.kind === 'class' && child?.name?.kind === 'identifier' && child?.name?.name === 'Controller') {
-            found = child;
-        } else {
-            found = findControllerClass(child);
-        }
-        return found !== undefined;
-    });
-    return found;
-}
-
-function findTextProperty(classBody, propertyName) {
-    let result = undefined;
-    classBody?.some((child) => {
-        if (child.kind !== 'propertystatement') {
-            return false;
-        }
-        return child?.properties?.some((property) => {
-            if (property?.kind !== 'property' || property?.name?.kind !== 'identifier' || property?.name?.name !== propertyName) {
-                return false;
-            }
-            const str = property?.value?.kind === 'string' ? property?.value?.value : null;
-            if (typeof str !== 'string') {
-                throw new Error(`Invalid type of the ${property} property`);
-            }
-            result = str;
-            return true;
-        });
-    });
-
-    return result;
-}
 
 /**
  * @typedef {Object} Result
