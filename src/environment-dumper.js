@@ -1,16 +1,8 @@
+const spawnedAwaiter = require('./spawned-awaiter');
 const spawn = require('child_process').spawn;
 
 async function run(command, args) {
-    const spawned = spawn(command, args, { stdio: 'inherit' });
-    await new Promise((resolve, reject) => {
-        spawned.on('exit', (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject();
-            }
-        });
-    });
+    await spawnedAwaiter.awaitSpawned(spawn(command, args, { stdio: 'inherit' }));
 }
 
 async function dumpEnvironment() {

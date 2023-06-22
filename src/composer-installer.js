@@ -1,6 +1,7 @@
 const spawn = require('child_process').spawn;
 const fs = require('fs');
 const path = require('path');
+const spawnedAwaiter = require('./spawned-awaiter');
 
 async function shouldKeepComposer(parent) {
     const contents = await fs.promises.readdir(parent, { withFileTypes: true, recursive: true });
@@ -43,16 +44,7 @@ async function installComposerDependencies(directory, composerBin, verbose) {
     if (verbose) {
         console.log(`Executing command:\n${command} ${args.join(' ')}`);
     }
-    const spawned = spawn(command, args, options);
-    await new Promise((resolve, reject) => {
-        spawned.on('exit', (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject();
-            }
-        });
-    });
+    await spawnedAwaiter.awaitSpawned(spawn(command, args, options));
     const vendorDir = path.join(directory, 'vendor');
     const keepComposer = await shouldKeepComposer(vendorDir);
     if (keepComposer) {

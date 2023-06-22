@@ -1,5 +1,6 @@
 const spawn = require('child_process').spawn;
 const fs = require('fs');
+const spawnedAwaiter = require('./spawned-awaiter');
 
 /**
  * @param {string} parentDirectory
@@ -15,19 +16,7 @@ async function createZip(parentDirectory, subdirectoryName, zipFile) {
         zipFile,
         subdirectoryName,
     ];
-    var spawned = spawn(command, args, {
-        stdio: 'inherit',
-        cwd: parentDirectory,
-    });
-    await new Promise((resolve, reject) => {
-        spawned.on('exit', (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject();
-            }
-        });
-    });
+    await spawnedAwaiter.awaitSpawned(spawn(command, args, {stdio: 'inherit', cwd: parentDirectory}));
     const stat = await fs.promises.stat(zipFile);
     console.log(`ZIP archive created: '${zipFile}' (${stat.size} bytes)`);
 
