@@ -17,8 +17,9 @@ async function shouldKeepComposer(parent) {
 /**
  * @param {string} directory
  * @param {string[]} composerBin
+ * @param {bool} verbose
  */
-async function installComposerDependencies(directory, composerBin) {
+async function installComposerDependencies(directory, composerBin, verbose) {
     const command = composerBin[0];
     const args = composerBin.slice(1).concat([
         'update',
@@ -31,13 +32,20 @@ async function installComposerDependencies(directory, composerBin) {
         '--no-interaction',
         '--no-cache',
     ]);
-    var process = spawn(command, args, {
+    const options = {
         stdio: 'inherit',
         cwd: directory,
-
-    });
+        env: { ...process.env },
+    };
+    if (verbose) {
+        options.env.COMPOSERPKG_VERBOSE = '1';
+    }
+    if (verbose) {
+        console.log(`Executing command:\n${command} ${args.join(' ')}`);
+    }
+    const spawned = spawn(command, args, options);
     await new Promise((resolve, reject) => {
-        process.on('exit', (code) => {
+        spawned.on('exit', (code) => {
             if (code === 0) {
                 resolve();
             } else {

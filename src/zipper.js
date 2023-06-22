@@ -15,12 +15,12 @@ async function createZip(parentDirectory, subdirectoryName, zipFile) {
         zipFile,
         subdirectoryName,
     ];
-    var process = spawn(command, args, {
+    var spawned = spawn(command, args, {
         stdio: 'inherit',
         cwd: parentDirectory,
     });
     await new Promise((resolve, reject) => {
-        process.on('exit', (code) => {
+        spawned.on('exit', (code) => {
             if (code === 0) {
                 resolve();
             } else {

@@ -1,7 +1,8 @@
 const github = require('@actions/github');
 const core = require('@actions/core');
-const uploadUrlResolver = require('./upload-url-resolver');
 const argumentsResolver = require('./arguments-resolver');
+const environmentDumper = require('./environment-dumper');
+const uploadUrlResolver = require('./upload-url-resolver');
 const controllerInspector = require('./controller-inspector');
 const composerInspector = require('./composer-inspector');
 const composerBinResolver = require('./composerbin-resolver');
@@ -18,9 +19,12 @@ async function run() {
         if (!process.env.GITHUB_TOKEN) {
             throw new Error('GITHUB_TOKEN environment variable not set');
         }
+        const args = argumentsResolver.resolveArguments();
+        if (args.verbose) {
+            await environmentDumper.dumpEnvironment();
+        }
         const client = github.getOctokit(process.env.GITHUB_TOKEN);
         const uploadUrl = uploadUrlResolver.resolveUploadUrl(github);
-        const args = argumentsResolver.resolveArguments();
         const packageInfo = await controllerInspector.parseFile('./controller.php');
         const composerInfo = await composerInspector.parseFile('./composer.json');
         const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ccm-pkg'));
@@ -33,7 +37,7 @@ async function run() {
             await fs.promises.mkdir(temporaryPackageDirectory);
             await repoExporter.exportRepository(temporaryPackageDirectory);
             if (composerBin !== null) {
-                await composerInstaller.installComposerDependencies(temporaryPackageDirectory, composerBin);
+                await composerInstaller.installComposerDependencies(temporaryPackageDirectory, composerBin, args.verbose);
             }
             await filesManager.removeAdditionalFiles(temporaryPackageDirectory, args.removeFiles);
             await filesManager.copyAdditionalFiles(temporaryPackageDirectory, args.keepFiles);

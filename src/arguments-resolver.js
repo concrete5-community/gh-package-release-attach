@@ -14,10 +14,24 @@ function stringToArray(str) {
     return result;
 }
 
+function stringToBool(str) {
+    switch (typeof str) {
+        case 'boolean':
+            return str;
+        case 'number':
+            return str !== 0;
+        case 'string':
+            return parseInt(str) ? true : false;
+        default:
+            return false;
+    }
+}
+
 /**
  * @typedef {Object} Result
  * @property {string[]} removeFiles
  * @property {string[]} keepFiles
+ * @property {verbose} verbose
  */
 
 /**
@@ -27,6 +41,7 @@ function resolveArguments() {
     return {
         removeFiles: stringToArray(core.getInput('remove-files')),
         keepFiles: stringToArray(core.getInput('keep-files')),
+        verbose: stringToBool(core.getInput('verbose')),
     };
 }
 

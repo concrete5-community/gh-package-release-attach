@@ -134,3 +134,16 @@ Having a `concrete5/core` dependency may be useful because:
 If your package can be installed with Composer, you can't add mark `composer.json` with `export-ignore` in your `.gitattributes` file (otherwise Composer won't work).
 
 But `composer.json` can be omitted in the ZIP archives containing your package, so you can configure the `concrete5-community/gh-package-release-attach` action to exclude it (see the `remove-files` section in the above sample GitHub workflow).
+
+## Increase verbosity
+
+You can increase the output verbosity by setting the `verbose` parameter to 1:
+
+```yaml
+      - name: Create and attach ZIP
+        uses: concrete5-community/gh-package-release-attach@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          verbose: 1
+```

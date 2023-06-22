@@ -4,17 +4,17 @@ const exec = require('child_process').exec;
  * @param {string} destinationDirectory
  */
 async function exportRepository(destinationDirectory) {
-    var process = exec(`git archive --format=tar HEAD | tar x -C '${destinationDirectory.replace(/(['$\\])/g, '\\$1')}'`);
+    var spawned = exec(`git archive --format=tar HEAD | tar x -C '${destinationDirectory.replace(/(['$\\])/g, '\\$1')}'`);
     let stdOut = '';
     let stdErr = '';
-    process.stdout.on('data', function (data) {
+    spawned.stdout.on('data', function (data) {
         stdOut += data;
     });
-    process.stderr.on('data', function (data) {
+    spawned.stderr.on('data', function (data) {
         stdErr += data;
     });
     await new Promise((resolve, reject) => {
-        process.on('exit', (code) => {
+        spawned.on('exit', (code) => {
             if (code === 0) {
                 resolve();
             } else {

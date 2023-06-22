@@ -12,6 +12,10 @@ inputs:
     description: "Files to be kept even if marked with export-ignore in .gitattributes"
     required: false
     default: ""
+  verbose:
+    description: "Set to 1 to have a more verbose output"
+    required: false
+    default: "0"
 runs:
   using: "node16"
   main: "dist/index.js"
