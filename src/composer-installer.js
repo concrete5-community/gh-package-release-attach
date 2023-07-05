@@ -49,7 +49,7 @@ async function installComposerDependencies(directory, composerBin, verbose) {
     if (keepComposer) {
         console.log('The composer dependencies have been installed');
     } else {
-        await fs.promises.rmdir(vendorDir, { recursive: true });
+        await fs.promises.rm(vendorDir, {recursive: true});
         console.log('No composer dependency required');
     }
 }
