@@ -99,7 +99,7 @@ Here's an example of a `.gitattributes` file:
 # Export-ignore a file named "phpunit.xml" in the root directory
 /phpunit.xml export-ignore
 
-# Export-ignore a file named "README.xmlmd" in the root directory
+# Export-ignore a file named "README.md" in the root directory
 /README.md export-ignore
 ```
 
