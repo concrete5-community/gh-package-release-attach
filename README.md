@@ -4,8 +4,15 @@ You can use this GitHub Action to automatically attach a ZIP archive of your Con
 
 ## Requirements
 
-1. `GITHUB_TOKEN` must be granted write access: go to the repository settings > `Actions` > `General`, and select `Read and write permissions` under `Workflow permissions`.
-2. The Concrete package is published in the root directory of the repository (for example, that means that your main `controller.php` file is in the root directory of the repository).
+1. The Concrete package is published in the root directory of the repository (for example, that means that your main `controller.php` file is in the root directory of the repository)
+2. This GitHub Action have to add attachments to GitHub releases. This can be achieved in two alternative ways:
+   - `GITHUB_TOKEN` must be granted write access: go to the repository settings > `Actions` > `General`, and select `Read and write permissions` under `Workflow permissions`
+   - Add these lines to your GitHub Action job:
+      ```yaml
+      permissions:
+        contents: write
+      ```
+
 
 ## Sample Usage
 
@@ -21,12 +28,14 @@ jobs:
   attach-zip:
     name: Attach ZIP to release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '7.3'
-          tools: composer:v2
+          php-version: '8.4'
+          tools: composer:v2.2
           coverage: none
       - name: Checkout
         uses: actions/checkout@v3
