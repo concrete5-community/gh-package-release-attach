@@ -33102,6 +33102,58 @@ function error$1(message, properties = {}) {
 }
 
 /**
+ * @typedef {Object} AttachZipToRelease
+ * @property {'attachZipToRelease'} kind
+ * @property {number} releaseId
+ */
+
+/**
+ * @typedef {Object} CreateDraftRelease
+ * @property {'createDraftRelease'} kind
+ * @property {string} tagName
+ * @property {string} version
+ */
+
+/**
+ * @returns {AttachZipToRelease|CreateDraftRelease|null}
+ */
+function resolveActionEnvironment() {
+  switch (context.eventName) {
+    case 'release':
+      if (context?.payload?.action === 'published') {
+        return {
+          kind: 'attachZipToRelease',
+          releaseId: context.payload.release.id,
+        };
+      }
+      console.log(
+        `The release is not published yet, skipping the upload of the zip file (action: ${JSON.stringify(context.payload?.action ?? null)})`,
+      );
+      return null;
+    case 'push':
+      const tagMatch = context?.ref?.match(/^refs\/tags\/(.+)$/);
+      const tagName = tagMatch ? tagMatch[1] : null;
+      const versionMatch = tagName ? tagName.match(/^(v\.?)?(\d+\.\d+.*)$/i) : null;
+      if (versionMatch) {
+        return {
+          kind: 'createDraftRelease',
+          tagName: tagName,
+          version: versionMatch[2],
+        };
+      }
+      console.log(
+        `Not pushing a version-like tag, skipping the creation of a draft release (ref: ${JSON.stringify(context.ref ?? null)})`,
+      );
+      return null;
+    default:
+      console.log(
+        `Unsupported event type '${context.eventName}', skipping the upload of the zip file (supported events are 'release' and 'push' of version-like tags)`,
+      );
+      return null;
+  }
+}
+
+/**
  * @param {any} str
  * @returns {string[]}
  */
@@ -33134,6 +33186,16 @@ function stringToBool(str) {
     case 'number':
       return str !== 0;
     case 'string':
+      switch (str.toLowerCase()) {
+        case 'true':
+        case 'yes':
+        case 'on':
+          return true;
+        case 'false':
+        case 'no':
+        case 'off':
+          return false;
+      }
       return parseInt(str) ? true : false;
     default:
       return false;
@@ -33219,26 +33281,6 @@ async function dumpEnvironment() {
   await run$1('php', ['-v']);
   console.log('Composer Version:\n');
   await run$1('composer', ['--version']);
-}
-
-/**
- * @returns {string}
- */
-function resolveUploadUrl() {
-  const uploadUrl = context?.payload?.release?.upload_url;
-  if (uploadUrl) {
-    return uploadUrl;
-  }
-  if (context.eventName !== 'release') {
-    throw new Error(`This action should be executed in a 'release' event (current event is '${context.eventName}')`);
-  }
-  const eventType = context?.payload?.action;
-  if (eventType && eventType !== 'published') {
-    throw new Error(
-      `Unsupported release type '${eventType}': try to run this action in a publish event of type 'published'`,
-    );
-  }
-  throw new Error('Failed to retrieve the upload URL');
 }
 
 var src = {exports: {}};
@@ -46950,6 +46992,10 @@ async function createZip(parentDirectory, subdirectoryName, zipFile) {
 
 async function run() {
   try {
+    const actionEnvironment = resolveActionEnvironment();
+    if (actionEnvironment === null) {
+      return;
+    }
     if (!process.env.GITHUB_TOKEN) {
       throw new Error('GITHUB_TOKEN environment variable not set');
     }
@@ -46958,8 +47004,12 @@ async function run() {
       await dumpEnvironment();
     }
     const client = getOctokit(process.env.GITHUB_TOKEN);
-    const uploadUrl = resolveUploadUrl();
     const packageInfo = await parseFile$1('./controller.php');
+    if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== `v${packageInfo.pkgVersion}`) {
+      throw new Error(
+        `The pushed tag (${actionEnvironment.tagName}) does not match the package version (v${packageInfo.pkgVersion})`,
+      );
+    }
     const composerInfo = await parseFile('./composer.json');
     const temporaryDirectory = await fs$1.mkdtemp(join(tmpdir(), 'ccm-pkg'));
     try {
@@ -46979,8 +47029,30 @@ async function run() {
       const packageZipFile = join(temporaryDirectory, zipFilename);
       const zipFileSize = await createZip(temporaryDirectory, packageInfo.pkgHandle, packageZipFile);
       const zipFileBytes = await fs$1.readFile(packageZipFile);
+      let releaseId;
+      switch (actionEnvironment.kind) {
+        case 'attachZipToRelease':
+          releaseId = actionEnvironment.releaseId;
+          break;
+        case 'createDraftRelease':
+          const releaseResponse = await client.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: actionEnvironment.tagName,
+            name: `v${actionEnvironment.version}`,
+            generate_release_notes: true,
+            draft: true,
+          });
+          releaseId = releaseResponse.data.id;
+          console.log(`Draft release created (ID: ${releaseId})`);
+          break;
+        default:
+          throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
+      }
       await client.rest.repos.uploadReleaseAsset({
-        url: uploadUrl,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        release_id: releaseId,
         headers: {
           'content-type': 'application/zip',
           'content-length': zipFileSize,
