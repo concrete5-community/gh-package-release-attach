@@ -47005,9 +47005,9 @@ async function run() {
     }
     const client = getOctokit(process.env.GITHUB_TOKEN);
     const packageInfo = await parseFile$1('./controller.php');
-    if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== `v${packageInfo.pkgVersion}`) {
+    if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
       throw new Error(
-        `The pushed tag (${actionEnvironment.tagName}) does not match the package version (v${packageInfo.pkgVersion})`,
+        `The pushed tag (${actionEnvironment.tagName}) does not match the package version (${packageInfo.pkgVersion})`,
       );
     }
     const composerInfo = await parseFile('./composer.json');
