@@ -33,6 +33,16 @@ function stringToBool(str) {
     case 'number':
       return str !== 0;
     case 'string':
+      switch (str.toLowerCase()) {
+        case 'true':
+        case 'yes':
+        case 'on':
+          return true;
+        case 'false':
+        case 'no':
+        case 'off':
+          return false;
+      }
       return parseInt(str) ? true : false;
     default:
       return false;
