@@ -1,11 +1,11 @@
 import {join as joinPath} from 'node:path';
 import * as fs from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {getOctokit} from '@actions/github';
+import {context, getOctokit} from '@actions/github';
 import {setFailed} from '@actions/core';
+import resolveActionEnvironment from './action-environment-resolver.js';
 import resolveArguments from './arguments-resolver.js';
 import dumpEnvironment from './environment-dumper.js';
-import resolveUploadUrl from './upload-url-resolver.js';
 import parseControllerFile from './controller-inspector.js';
 import parseComposerFile from './composer-inspector.js';
 import resolveComposerBin from './composerbin-resolver.js';
@@ -16,6 +16,10 @@ import createZip from './zipper.js';
 
 async function run() {
   try {
+    const actionEnvironment = resolveActionEnvironment();
+    if (actionEnvironment === null) {
+      return;
+    }
     if (!process.env.GITHUB_TOKEN) {
       throw new Error('GITHUB_TOKEN environment variable not set');
     }
@@ -24,8 +28,12 @@ async function run() {
       await dumpEnvironment();
     }
     const client = getOctokit(process.env.GITHUB_TOKEN);
-    const uploadUrl = resolveUploadUrl();
     const packageInfo = await parseControllerFile('./controller.php');
+    if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== `v${packageInfo.pkgVersion}`) {
+      throw new Error(
+        `The pushed tag (${actionEnvironment.tagName}) does not match the package version (v${packageInfo.pkgVersion})`,
+      );
+    }
     const composerInfo = await parseComposerFile('./composer.json');
     const temporaryDirectory = await fs.mkdtemp(joinPath(tmpdir(), 'ccm-pkg'));
     try {
@@ -45,8 +53,30 @@ async function run() {
       const packageZipFile = joinPath(temporaryDirectory, zipFilename);
       const zipFileSize = await createZip(temporaryDirectory, packageInfo.pkgHandle, packageZipFile);
       const zipFileBytes = await fs.readFile(packageZipFile);
+      let releaseId;
+      switch (actionEnvironment.kind) {
+        case 'attachZipToRelease':
+          releaseId = actionEnvironment.releaseId;
+          break;
+        case 'createDraftRelease':
+          const releaseResponse = await client.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: actionEnvironment.tagName,
+            name: `v${actionEnvironment.version}`,
+            generate_release_notes: true,
+            draft: true,
+          });
+          releaseId = releaseResponse.data.id;
+          console.log(`Draft release created (ID: ${releaseId})`);
+          break;
+        default:
+          throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
+      }
       await client.rest.repos.uploadReleaseAsset({
-        url: uploadUrl,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        release_id: releaseId,
         headers: {
           'content-type': 'application/zip',
           'content-length': zipFileSize,

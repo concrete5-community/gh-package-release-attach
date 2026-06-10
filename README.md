@@ -1,19 +1,23 @@
 # GitHub Action to create ZIP archives for concrete5/ConcreteCMS packages
 
-You can use this GitHub Action to automatically attach a ZIP archive of your Concrete package to GitHub Releases.
+You can use this GitHub Action to automatically attach a ZIP archive of your Concrete package to GitHub Releases when you publish them or to prepare a GitHub Release when you push a version-like tag (eg `1.2.3` or `v1.2.3`).
 
-## Requirements
+### Requirements
 
 1. The Concrete package is published in the root directory of the repository (for example, that means that your main `controller.php` file is in the root directory of the repository)
 2. This GitHub Action have to add attachments to GitHub releases. This can be achieved in two alternative ways:
-   - `GITHUB_TOKEN` must be granted write access: go to the repository settings > `Actions` > `General`, and select `Read and write permissions` under `Workflow permissions`
    - Add these lines to your GitHub Action job:
      ```yaml
      permissions:
        contents: write
      ```
+   - `GITHUB_TOKEN` must be granted write access: go to the repository settings > `Actions` > `General`, and select `Read and write permissions` under `Workflow permissions`
 
-## Sample Usage
+## Automatically attaching ZIP archive to GitHub Releases
+
+You can invoke this Action whenever you publish a GitHub Release (note: doesn't work in case of immutable releases).
+
+### Example
 
 ```yaml
 name: Attach ZIP to GitHub Release
@@ -22,7 +26,6 @@ on:
   release:
     types:
       - published
-
 jobs:
   attach-zip:
     name: Attach ZIP to release
@@ -39,6 +42,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Create and attach ZIP
+        uses: concrete5-community/gh-package-release-attach@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          remove-files: |
+            composer.json
+            composer.lock
+          keep-files: |
+            README.md
+```
+
+## Creating draft GitHub Releases when pushing version-like tags
+
+If your repository has release immutability enabled, it's not possible to attach files to published releases.
+
+In this case, you can use this Action to prepare a draft release for you whenever you push a version-like tag to the repository (eg `1.2.3` or `v1.2.3`).
+
+### Example
+
+```yaml
+name: Prepare GitHub Release
+
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  prepare-gh-release:
+    name: Prepare GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2.2
+          coverage: none
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Create draft release
         uses: concrete5-community/gh-package-release-attach@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -146,13 +191,12 @@ But `composer.json` can be omitted in the ZIP archives containing your package, 
 
 ## Increase verbosity
 
-You can increase the output verbosity by setting the `verbose` parameter to 1:
+You can increase the output verbosity by setting the `verbose` parameter to `true`:
 
 ```yaml
-- name: Create and attach ZIP
-  uses: concrete5-community/gh-package-release-attach@main
+- uses: concrete5-community/gh-package-release-attach@main
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
-    verbose: 1
+    verbose: true
 ```
