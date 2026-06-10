@@ -1,12 +1,14 @@
-const exec = require('child_process').exec;
-const spawnedAwaiter = require('./spawned-awaiter');
+import {exec} from 'node:child_process';
+import awaitChildProcess from './childprocess-awaiter.js';
 
 /**
  * @param {string} destinationDirectory
+ * @returns {Promise<void>}
  */
-async function exportRepository(destinationDirectory) {
-    const spawned = exec(`git archive --format=tar HEAD | tar x -C '${destinationDirectory.replace(/(['$\\])/g, '\\$1')}'`);
-    await spawnedAwaiter.awaitSpawned(spawned, true);
-    console.log(`The repository has been exported to ${destinationDirectory}`);
+export default async function exportRepository(destinationDirectory) {
+  const spawned = exec(
+    `git archive --format=tar HEAD | tar x -C '${destinationDirectory.replace(/(['$\\])/g, '\\$1')}'`,
+  );
+  await awaitChildProcess(spawned, true);
+  console.log(`The repository has been exported to ${destinationDirectory}`);
 }
-exports.exportRepository = exportRepository;

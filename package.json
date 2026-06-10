@@ -2,19 +2,33 @@
   "name": "gh-package-release-attach",
   "version": "1.0.0",
   "description": "A GitHub Action that automatically creates a ZIP archive containing a ConcreteCMS package and attach it to GitHub releases",
-  "main": "dist/index.js",
-  "scripts": {
-    "build": "ncc build src/main.js --minify --no-cache --license licenses.txt"
+  "homepage": "https://github.com/concrete5-community/gh-package-release-attach",
+  "bugs": {
+    "url": "https://github.com/concrete5-community/gh-package-release-attach/issues"
   },
-  "author": "Michele Locati <michele@locati.it>",
   "license": "MIT",
+  "author": "Michele Locati <michele@locati.it>",
+  "type": "module",
+  "engines": {
+    "node": "^24.13"
+  },
+  "scripts": {
+    "lint:check": "prettier --config .prettierrc --check package.json *.js \"src/**/*.js\"",
+    "lint:fix": "prettier --config .prettierrc --write package.json *.js \"src/**/*.js\"",
+    "prebuild": "shx rm -rf dist",
+    "build": "npx rollup --config rollup.config.js"
+  },
   "dependencies": {
-    "@actions/core": "^1.10.0",
-    "@actions/exec": "^1.0.0",
-    "@actions/github": "^5.1.1",
-    "php-parser": "^3.1.5"
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "@actions/github": "^9.1.1",
+    "php-parser": "^3.6.0"
   },
   "devDependencies": {
-    "@vercel/ncc": "^0.36.1"
+    "@rollup/plugin-commonjs": "^29.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "prettier": "^3.8.4",
+    "rollup": "^4.61.1",
+    "shx": "^0.4.0"
   }
 }

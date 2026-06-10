@@ -1,0 +1,46 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  check-dist:
+    name: Check dist folder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install NodeJS
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+      - name: Checkout
+        uses: actions/checkout@v6
+      - run: npm ci
+      - name: Build dist
+        run: npm run-script build
+      - name: Check changes
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::Changes detected in dist folder. Please run 'npm run build' and commit the changes before pushing"
+            git diff --name-only
+            exit 1
+          fi
+          echo "✅ dist folder is up to date with the source code"
+  check-js:
+    name: Check JS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install NodeJS
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+      - name: Checkout
+        uses: actions/checkout@v6
+      - run: npm ci
+      - name: Check syntax
+        run: npm run-script lint:check

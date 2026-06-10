@@ -1,53 +1,55 @@
-const path = require('path');
-const fs = require('fs');
+import {join as joinPath} from 'node:path';
+import * as fs from 'node:fs/promises';
 
+/**
+ *
+ * @param {string} fullPath
+ * @returns {Promise<boolean>}
+ */
 async function isFile(fullPath) {
-    return await new Promise((resolve, reject) => {
-        fs.stat(fullPath, (err, stats) => {
-            if (err) {
-                if (err.code === 'ENOENT') {
-                    resolve(false);
-                } else {
-                    reject(err);
-                }
-            } else if (stats.isDirectory()) {
-                reject(new Error(`'${item}' is a directory, not a file`));
-            } else {
-                resolve(true);
-            }
-        });
-    });
+  let stats;
+  try {
+    stats = await fs.stat(fullPath);
+  } catch (err) {
+    if (err?.code === 'ENOENT') {
+      return false;
+    }
+    throw err;
+  }
+  if (stats.isDirectory()) {
+    throw new Error(`'${fullPath}' is a directory, not a file`);
+  }
+  return true;
 }
 
 /**
- * @param {string} workingDirectory 
- * @param {string[]} list 
+ * @param {string} workingDirectory
+ * @param {string[]} list
+ * @return {Promise<void>}
  */
-async function copyAdditionalFiles(workingDirectory, list) {
-    for (const item of list) {
-        const fullPath = path.join(workingDirectory, item);
-        if (await isFile(fullPath)) {
-            return;
-        }
-        await fs.promises.copyFile(item, fullPath);
-        console.log(`Copied additional file: '${item}'`);
+export async function copyAdditionalFiles(workingDirectory, list) {
+  for (const item of list) {
+    const fullPath = joinPath(workingDirectory, item);
+    if (await isFile(fullPath)) {
+      return;
     }
+    await fs.copyFile(item, fullPath);
+    console.log(`Copied additional file: '${item}'`);
+  }
 }
 
 /**
- * @param {string} workingDirectory 
- * @param {string[]} list 
+ * @param {string} workingDirectory
+ * @param {string[]} list
+ * @return {Promise<void>}
  */
-async function removeAdditionalFiles(workingDirectory, list) {
-    for (const item of list) {
-        const fullPath = path.join(workingDirectory, item);
-        if (!await isFile(fullPath)) {
-            return;
-        }
-        await fs.promises.rm(fullPath);
-        console.log(`Removed additional file: '${item}'`);
+export async function removeAdditionalFiles(workingDirectory, list) {
+  for (const item of list) {
+    const fullPath = joinPath(workingDirectory, item);
+    if (!(await isFile(fullPath))) {
+      return;
     }
+    await fs.rm(fullPath);
+    console.log(`Removed additional file: '${item}'`);
+  }
 }
-
-exports.copyAdditionalFiles = copyAdditionalFiles;
-exports.removeAdditionalFiles = removeAdditionalFiles;
