@@ -8,11 +8,10 @@ You can use this GitHub Action to automatically attach a ZIP archive of your Con
 2. This GitHub Action have to add attachments to GitHub releases. This can be achieved in two alternative ways:
    - `GITHUB_TOKEN` must be granted write access: go to the repository settings > `Actions` > `General`, and select `Read and write permissions` under `Workflow permissions`
    - Add these lines to your GitHub Action job:
-      ```yaml
-      permissions:
-        contents: write
-      ```
-
+     ```yaml
+     permissions:
+       contents: write
+     ```
 
 ## Sample Usage
 
@@ -38,7 +37,7 @@ jobs:
           tools: composer:v2.2
           coverage: none
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Create and attach ZIP
         uses: concrete5-community/gh-package-release-attach@main
         env:
@@ -56,36 +55,37 @@ jobs:
 If your package is compatible with concrete5 v8 and later, you should use PHP 5.5 and Composer v1:
 
 ```yaml
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '5.5'
-          tools: composer:v1
-          coverage: none
+- name: Setup PHP
+  uses: shivammathur/setup-php@v2
+  with:
+    php-version: '5.5'
+    tools: composer:v2.2
+    coverage: none
 ```
 
 If your package is compatible with ConcreteCMS v9 and later, you should use PHP 7.3 and Composer v2:
 
 ```yaml
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '7.3'
-          tools: composer:v2
-          coverage: none
+- name: Setup PHP
+  uses: shivammathur/setup-php@v2
+  with:
+    php-version: '7.3'
+    tools: composer:v2
+    coverage: none
 ```
 
 Of course, even if your package is compatible with concrete5 8, you can still require that your users have a greater PHP version: if so, set the `Setup PHP` step accordingly.
 
 > **Note**
 > It's a good practice to have a `composer.json` file defining the (minimum) PHP version to be used in production, as in the following example:
+>
 > ```json
 > {
->     "config": {
->         "platform": {
->             "php": "7.3"
->         }
+>   "config": {
+>     "platform": {
+>       "php": "7.3"
 >     }
+>   }
 > }
 > ```
 
@@ -122,16 +122,16 @@ For example:
 
 ```json
 {
-    "name" : "your-name/your_package_handle",
-    "type" : "concrete5-package",
-    "support": {
-        "issues": "https://github.com/concrete5-community/acme/issues",
-        "source": "https://github.com/concrete5-community/acme"
-    },
-    "require": {
-        "concrete5/core": "^8.5 || >= 9",
-        "vendor/dependency": "^1"
-    }
+  "name": "your-name/your_package_handle",
+  "type": "concrete5-package",
+  "support": {
+    "issues": "https://github.com/concrete5-community/acme/issues",
+    "source": "https://github.com/concrete5-community/acme"
+  },
+  "require": {
+    "concrete5/core": "^8.5 || >= 9",
+    "vendor/dependency": "^1"
+  }
 }
 ```
 
@@ -149,10 +149,10 @@ But `composer.json` can be omitted in the ZIP archives containing your package, 
 You can increase the output verbosity by setting the `verbose` parameter to 1:
 
 ```yaml
-      - name: Create and attach ZIP
-        uses: concrete5-community/gh-package-release-attach@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          verbose: 1
+- name: Create and attach ZIP
+  uses: concrete5-community/gh-package-release-attach@main
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    verbose: 1
 ```

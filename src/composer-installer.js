@@ -1,56 +1,62 @@
-const spawn = require('child_process').spawn;
-const fs = require('fs');
-const path = require('path');
-const spawnedAwaiter = require('./spawned-awaiter');
+import {spawn} from 'node:child_process';
+import {join as joinPath} from 'node:path';
+import * as fs from 'node:fs/promises';
+import awaitChildProcess from './childprocess-awaiter.js';
 
+/**
+ * @param {string} parent
+ * @returns {Promise<boolean>}
+ */
 async function shouldKeepComposer(parent) {
-    const contents = await fs.promises.readdir(parent, { withFileTypes: true, recursive: true });
-    const directories = contents.filter((ent) => ent.isDirectory());
-    if (directories.length === 0) {
-        throw new Error('At least the vendor/composer directory should have been found!');
-    }
-    if (!directories.some((dir) => dir.name === 'composer')) {
-        throw new Error('The vendor/composer directory should have been found!');
-    }
+  const contents = await fs.readdir(parent, {withFileTypes: true, recursive: true});
+  const directories = contents.filter((ent) => ent.isDirectory());
+  if (directories.length === 0) {
+    throw new Error('At least the vendor/composer directory should have been found!');
+  }
+  if (!directories.some((dir) => dir.name === 'composer')) {
+    throw new Error('The vendor/composer directory should have been found!');
+  }
 
-    return directories.length > 1;
+  return directories.length > 1;
 }
 /**
  * @param {string} directory
  * @param {string[]} composerBin
- * @param {bool} verbose
+ * @param {boolean} verbose
+ * @returns {Promise<void>}
  */
-async function installComposerDependencies(directory, composerBin, verbose) {
-    const command = composerBin[0];
-    const args = composerBin.slice(1).concat([
-        'update',
-        '--prefer-dist',
-        '--no-dev',
-        '--no-progress',
-        '--optimize-autoloader',
-        '--ansi',
-        '--no-interaction',
-        '--no-cache',
+export default async function installComposerDependencies(directory, composerBin, verbose) {
+  const command = composerBin[0];
+  const args = composerBin
+    .slice(1)
+    .concat([
+      'update',
+      '--prefer-dist',
+      '--no-dev',
+      '--no-progress',
+      '--optimize-autoloader',
+      '--ansi',
+      '--no-interaction',
+      '--no-cache',
     ]);
-    const options = {
-        stdio: 'inherit',
-        cwd: directory,
-        env: { ...process.env },
-    };
-    if (verbose) {
-        options.env.COMPOSERPKG_VERBOSE = '1';
-    }
-    if (verbose) {
-        console.log(`Executing command:\n${command} ${args.join(' ')}`);
-    }
-    await spawnedAwaiter.awaitSpawned(spawn(command, args, options));
-    const vendorDir = path.join(directory, 'vendor');
-    const keepComposer = await shouldKeepComposer(vendorDir);
-    if (keepComposer) {
-        console.log('The composer dependencies have been installed');
-    } else {
-        await fs.promises.rm(vendorDir, {recursive: true});
-        console.log('No composer dependency required');
-    }
+  const options = {
+    stdio: 'inherit',
+    cwd: directory,
+    env: {...process.env},
+  };
+  if (verbose) {
+    options.env.COMPOSERPKG_VERBOSE = '1';
+  }
+  if (verbose) {
+    console.log(`Executing command:\n${command} ${args.join(' ')}`);
+  }
+  await awaitChildProcess(spawn(command, args, options));
+  const vendorDir = joinPath(directory, 'vendor');
+  const keepComposer = await shouldKeepComposer(vendorDir);
+  if (keepComposer) {
+    console.log('The composer dependencies have been installed');
+  } else {
+    await fs.rm(vendorDir, {recursive: true});
+    console.log('No composer dependency required');
+  }
 }
-exports.installComposerDependencies = installComposerDependencies;
