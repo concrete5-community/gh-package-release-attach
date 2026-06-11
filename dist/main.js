@@ -35,6 +35,7 @@ import 'crypto';
 import 'path';
 import 'child_process';
 import 'timers';
+import { env } from 'node:process';
 import { spawn, exec } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 
@@ -33203,7 +33204,23 @@ function stringToBool(str) {
 }
 
 /**
+ * @returns {string}
+ */
+function resolveToken() {
+  let token = getInput('token')?.trim();
+  if (token) {
+    return token;
+  }
+  token = env.GITHUB_TOKEN?.trim();
+  if (token) {
+    return token;
+  }
+  throw new Error('GitHub token not provided. Please set the "token" input or the GITHUB_TOKEN environment variable.');
+}
+
+/**
  * @typedef {Object} Result
+ * @property {string} token
  * @property {string[]} removeFiles
  * @property {string[]} keepFiles
  * @property {boolean} verbose
@@ -33214,6 +33231,7 @@ function stringToBool(str) {
  */
 function resolveArguments() {
   return {
+    token: resolveToken(),
     removeFiles: stringToArray(getInput('remove-files')),
     keepFiles: stringToArray(getInput('keep-files')),
     verbose: stringToBool(getInput('verbose')),
@@ -46996,14 +47014,11 @@ async function run() {
     if (actionEnvironment === null) {
       return;
     }
-    if (!process.env.GITHUB_TOKEN) {
-      throw new Error('GITHUB_TOKEN environment variable not set');
-    }
     const args = resolveArguments();
     if (args.verbose) {
       await dumpEnvironment();
     }
-    const client = getOctokit(process.env.GITHUB_TOKEN);
+    const client = getOctokit(args.token);
     const packageInfo = await parseFile$1('./controller.php');
     if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
       throw new Error(
@@ -47035,6 +47050,9 @@ async function run() {
           releaseId = actionEnvironment.releaseId;
           break;
         case 'createDraftRelease':
+          console.log(
+            `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}'...`,
+          );
           const releaseResponse = await client.rest.repos.createRelease({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -47049,6 +47067,9 @@ async function run() {
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
+      console.log(
+        `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
+      );
       await client.rest.repos.uploadReleaseAsset({
         owner: context.repo.owner,
         repo: context.repo.repo,

@@ -20,14 +20,11 @@ async function run() {
     if (actionEnvironment === null) {
       return;
     }
-    if (!process.env.GITHUB_TOKEN) {
-      throw new Error('GITHUB_TOKEN environment variable not set');
-    }
     const args = resolveArguments();
     if (args.verbose) {
       await dumpEnvironment();
     }
-    const client = getOctokit(process.env.GITHUB_TOKEN);
+    const client = getOctokit(args.token);
     const packageInfo = await parseControllerFile('./controller.php');
     if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
       throw new Error(
@@ -59,6 +56,9 @@ async function run() {
           releaseId = actionEnvironment.releaseId;
           break;
         case 'createDraftRelease':
+          console.log(
+            `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}'...`,
+          );
           const releaseResponse = await client.rest.repos.createRelease({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -73,6 +73,9 @@ async function run() {
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
+      console.log(
+        `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
+      );
       await client.rest.repos.uploadReleaseAsset({
         owner: context.repo.owner,
         repo: context.repo.repo,

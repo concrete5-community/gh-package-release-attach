@@ -1,4 +1,5 @@
 import {getInput} from '@actions/core';
+import {env} from 'node:process';
 
 /**
  * @param {any} str
@@ -50,7 +51,23 @@ function stringToBool(str) {
 }
 
 /**
+ * @returns {string}
+ */
+function resolveToken() {
+  let token = getInput('token')?.trim();
+  if (token) {
+    return token;
+  }
+  token = env.GITHUB_TOKEN?.trim();
+  if (token) {
+    return token;
+  }
+  throw new Error('GitHub token not provided. Please set the "token" input or the GITHUB_TOKEN environment variable.');
+}
+
+/**
  * @typedef {Object} Result
+ * @property {string} token
  * @property {string[]} removeFiles
  * @property {string[]} keepFiles
  * @property {boolean} verbose
@@ -61,6 +78,7 @@ function stringToBool(str) {
  */
 export default function resolveArguments() {
   return {
+    token: resolveToken(),
     removeFiles: stringToArray(getInput('remove-files')),
     keepFiles: stringToArray(getInput('keep-files')),
     verbose: stringToBool(getInput('verbose')),

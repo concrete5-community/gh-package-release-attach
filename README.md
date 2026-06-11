@@ -11,7 +11,7 @@ You can use this GitHub Action to automatically attach a ZIP archive of your Con
      permissions:
        contents: write
      ```
-   - `GITHUB_TOKEN` must be granted write access: go to the repository settings > `Actions` > `General`, and select `Read and write permissions` under `Workflow permissions`
+   - Pass the action a `token` input containing a GitHub token or PAT that has write access to the repository
 
 ## Automatically attaching ZIP archive to GitHub Releases
 
@@ -43,8 +43,6 @@ jobs:
         uses: actions/checkout@v6
       - name: Create and attach ZIP
         uses: concrete5-community/gh-package-release-attach@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           remove-files: |
             composer.json
@@ -85,8 +83,6 @@ jobs:
         uses: actions/checkout@v6
       - name: Create draft release
         uses: concrete5-community/gh-package-release-attach@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           remove-files: |
             composer.json
@@ -195,8 +191,6 @@ You can increase the output verbosity by setting the `verbose` parameter to `tru
 
 ```yaml
 - uses: concrete5-community/gh-package-release-attach@main
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     verbose: true
 ```
