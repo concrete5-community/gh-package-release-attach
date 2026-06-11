@@ -25,6 +25,22 @@ function isPropertyStatementNode(node) {
 
 /**
  * @param {import('php-parser').Node} node
+ * @returns {node is import('php-parser').ClassConstant}
+ */
+function isClassConstantStatementNode(node) {
+  return node.kind === 'classconstant';
+}
+
+/**
+ * @param {import('php-parser').Node} node
+ * @returns {node is import('php-parser').Constant}
+ */
+function isConstantNode(node) {
+  return node.kind === 'constant';
+}
+
+/**
+ * @param {import('php-parser').Node} node
  * @returns {node is import('php-parser').Property}
  */
 function isPropertyNode(node) {
@@ -73,9 +89,44 @@ function findTextProperty(classBody, propertyName) {
       if (!isPropertyNode(property) || !isNodeWithIdentifierName(property.name, propertyName)) {
         return false;
       }
+      if (
+        property?.value?.kind === 'staticlookup' &&
+        property?.value?.what?.kind === 'selfreference' &&
+        typeof property?.value?.offset?.name === 'string'
+      ) {
+        result = findStringClassConstant(classBody, property.value.offset.name);
+        return true;
+      }
       const str = property?.value?.kind === 'string' ? property?.value?.value : null;
       if (typeof str !== 'string') {
         throw new Error(`Invalid type of the ${propertyName} property`);
+      }
+      result = str;
+      return true;
+    });
+  });
+
+  return result;
+}
+
+/**
+ * @param {import('php-parser').Declaration[]} classBody
+ * @param {string} constantName
+ * @returns {string|undefined}
+ */
+function findStringClassConstant(classBody, constantName) {
+  let result = undefined;
+  classBody?.some((child) => {
+    if (!isClassConstantStatementNode(child)) {
+      return false;
+    }
+    return child?.constants?.some((constant) => {
+      if (!isConstantNode(constant) || !isNodeWithIdentifierName(constant.name, constantName)) {
+        return false;
+      }
+      const str = constant?.value?.kind === 'string' ? constant?.value?.value : null;
+      if (typeof str !== 'string') {
+        throw new Error(`Invalid type of the ${constantName} constant`);
       }
       result = str;
       return true;
