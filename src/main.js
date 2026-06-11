@@ -2,7 +2,7 @@ import {join as joinPath} from 'node:path';
 import * as fs from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {context, getOctokit} from '@actions/github';
-import {setFailed} from '@actions/core';
+import {setFailed, summary} from '@actions/core';
 import resolveActionEnvironment from './action-environment-resolver.js';
 import resolveArguments from './arguments-resolver.js';
 import dumpEnvironment from './environment-dumper.js';
@@ -51,6 +51,8 @@ async function run() {
       const zipFileSize = await createZip(temporaryDirectory, packageInfo.pkgHandle, packageZipFile);
       const zipFileBytes = await fs.readFile(packageZipFile);
       let releaseId;
+      let publishRelease = false;
+      let newlyCreatedReleaseUrl;
       switch (actionEnvironment.kind) {
         case 'attachZipToRelease':
           releaseId = actionEnvironment.releaseId;
@@ -68,7 +70,11 @@ async function run() {
             draft: true,
           });
           releaseId = releaseResponse.data.id;
+          newlyCreatedReleaseUrl = releaseResponse.data.html_url;
           console.log(`Draft release created (ID: ${releaseId})`);
+          if (args.publishRelease) {
+            publishRelease = true;
+          }
           break;
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
@@ -88,6 +94,22 @@ async function run() {
         data: zipFileBytes,
       });
       console.log('ZIP file attached to release');
+      if (publishRelease) {
+        console.log(`Publishing release (ID: ${releaseId})...`);
+        await client.rest.repos.updateRelease({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          release_id: releaseId,
+          draft: false,
+        });
+        console.log('Release published');
+      }
+      if (newlyCreatedReleaseUrl) {
+        await summary
+          .addHeading('Release created and ZIP file attached', 2)
+          .addLink(newlyCreatedReleaseUrl, 'View release on GitHub')
+          .write();
+      }
     } finally {
       try {
         await fs.rm(temporaryDirectory, {recursive: true});

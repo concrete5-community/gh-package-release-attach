@@ -70,6 +70,7 @@ function resolveToken() {
  * @property {string} token
  * @property {string[]} removeFiles
  * @property {string[]} keepFiles
+ * @property {boolean} publishRelease
  * @property {boolean} verbose
  */
 
@@ -81,6 +82,7 @@ export default function resolveArguments() {
     token: resolveToken(),
     removeFiles: stringToArray(getInput('remove-files')),
     keepFiles: stringToArray(getInput('keep-files')),
+    publishRelease: stringToBool(getInput('publish-release')),
     verbose: stringToBool(getInput('verbose')),
   };
 }

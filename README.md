@@ -51,7 +51,7 @@ jobs:
             README.md
 ```
 
-## Creating draft GitHub Releases when pushing version-like tags
+## Creating GitHub Releases when pushing version-like tags
 
 If your repository has release immutability enabled, it's not possible to attach files to published releases.
 
@@ -89,6 +89,15 @@ jobs:
             composer.lock
           keep-files: |
             README.md
+```
+
+If you prefer to create a published (not a draft) release, you can use `publish-release`:
+
+```yaml
+- name: Create published release
+  uses: concrete5-community/gh-package-release-attach@main
+  with:
+    publish-release: true
 ```
 
 ## PHP Version
