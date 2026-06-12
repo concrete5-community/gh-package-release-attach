@@ -96,12 +96,13 @@ async function run() {
       console.log('ZIP file attached to release');
       if (publishRelease) {
         console.log(`Publishing release (ID: ${releaseId})...`);
-        await client.rest.repos.updateRelease({
+        const updatedRelease = await client.rest.repos.updateRelease({
           owner: context.repo.owner,
           repo: context.repo.repo,
           release_id: releaseId,
           draft: false,
         });
+        newlyCreatedReleaseUrl = updatedRelease.data.html_url;
         console.log('Release published');
       }
       if (newlyCreatedReleaseUrl) {
