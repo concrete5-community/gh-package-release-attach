@@ -107,7 +107,7 @@ async function run() {
       if (newlyCreatedReleaseUrl) {
         await summary
           .addHeading('Release created and ZIP file attached', 2)
-          .addLink(newlyCreatedReleaseUrl, 'View release on GitHub')
+          .addLink('View release on GitHub', newlyCreatedReleaseUrl)
           .write();
       }
     } finally {
