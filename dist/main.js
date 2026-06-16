@@ -33371,14 +33371,15 @@ function error$1(message, properties = {}) {
  */
 
 /**
- * @typedef {Object} CreateDraftRelease
- * @property {'createDraftRelease'} kind
+ * @typedef {Object} CreateRelease
+ * @property {'createRelease'} kind
  * @property {string} tagName
  * @property {string} version
+ * @property {boolean} prerelease
  */
 
 /**
- * @returns {AttachZipToRelease|CreateDraftRelease|null}
+ * @returns {AttachZipToRelease|CreateRelease|null}
  */
 function resolveActionEnvironment() {
   switch (context.eventName) {
@@ -33399,9 +33400,11 @@ function resolveActionEnvironment() {
       const versionMatch = tagName ? tagName.match(/^(v\.?)?(\d+\.\d+.*)$/i) : null;
       if (versionMatch) {
         return {
-          kind: 'createDraftRelease',
+          kind: 'createRelease',
           tagName: tagName,
           version: versionMatch[2],
+          prerelease:
+            versionMatch[2].match(/[^a-z](alpha|a|beta|b|rc|dev|pre|preview|snapshot)([.\-]\d+(\.\d+)*)?$/i) !== null,
         };
       }
       console.log(
@@ -47335,7 +47338,7 @@ async function run() {
     }
     const client = getOctokit(args.token);
     const packageInfo = await parseFile$1('./controller.php');
-    if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
+    if (actionEnvironment.kind === 'createRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
       throw new Error(
         `The pushed tag (${actionEnvironment.tagName}) does not match the package version (${packageInfo.pkgVersion})`,
       );
@@ -47366,7 +47369,7 @@ async function run() {
         case 'attachZipToRelease':
           releaseId = actionEnvironment.releaseId;
           break;
-        case 'createDraftRelease':
+        case 'createRelease':
           console.log(
             `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}'...`,
           );
@@ -47377,6 +47380,7 @@ async function run() {
             name: `v${actionEnvironment.version}`,
             generate_release_notes: true,
             draft: true,
+            prerelease: actionEnvironment.prerelease,
           });
           releaseId = releaseResponse.data.id;
           newlyCreatedReleaseUrl = releaseResponse.data.html_url;

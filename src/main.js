@@ -26,7 +26,7 @@ async function run() {
     }
     const client = getOctokit(args.token);
     const packageInfo = await parseControllerFile('./controller.php');
-    if (actionEnvironment.kind === 'createDraftRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
+    if (actionEnvironment.kind === 'createRelease' && actionEnvironment.version !== packageInfo.pkgVersion) {
       throw new Error(
         `The pushed tag (${actionEnvironment.tagName}) does not match the package version (${packageInfo.pkgVersion})`,
       );
@@ -57,7 +57,7 @@ async function run() {
         case 'attachZipToRelease':
           releaseId = actionEnvironment.releaseId;
           break;
-        case 'createDraftRelease':
+        case 'createRelease':
           console.log(
             `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}'...`,
           );
@@ -68,6 +68,7 @@ async function run() {
             name: `v${actionEnvironment.version}`,
             generate_release_notes: true,
             draft: true,
+            prerelease: actionEnvironment.prerelease,
           });
           releaseId = releaseResponse.data.id;
           newlyCreatedReleaseUrl = releaseResponse.data.html_url;

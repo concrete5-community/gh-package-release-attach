@@ -7,14 +7,15 @@ import {context} from '@actions/github';
  */
 
 /**
- * @typedef {Object} CreateDraftRelease
- * @property {'createDraftRelease'} kind
+ * @typedef {Object} CreateRelease
+ * @property {'createRelease'} kind
  * @property {string} tagName
  * @property {string} version
+ * @property {boolean} prerelease
  */
 
 /**
- * @returns {AttachZipToRelease|CreateDraftRelease|null}
+ * @returns {AttachZipToRelease|CreateRelease|null}
  */
 export default function resolveActionEnvironment() {
   switch (context.eventName) {
@@ -35,9 +36,11 @@ export default function resolveActionEnvironment() {
       const versionMatch = tagName ? tagName.match(/^(v\.?)?(\d+\.\d+.*)$/i) : null;
       if (versionMatch) {
         return {
-          kind: 'createDraftRelease',
+          kind: 'createRelease',
           tagName: tagName,
           version: versionMatch[2],
+          prerelease:
+            versionMatch[2].match(/[^a-z](alpha|a|beta|b|rc|dev|pre|preview|snapshot)([.\-]\d+(\.\d+)*)?$/i) !== null,
         };
       }
       console.log(
