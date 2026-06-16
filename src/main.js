@@ -69,6 +69,7 @@ async function run() {
             generate_release_notes: true,
             draft: true,
             prerelease: actionEnvironment.prerelease,
+            make_latest: actionEnvironment.prerelease ? 'false' : 'true',
           });
           releaseId = releaseResponse.data.id;
           newlyCreatedReleaseUrl = releaseResponse.data.html_url;
@@ -102,6 +103,8 @@ async function run() {
           repo: context.repo.repo,
           release_id: releaseId,
           draft: false,
+          prerelease: actionEnvironment.prerelease,
+          make_latest: actionEnvironment.prerelease ? 'false' : 'true',
         });
         newlyCreatedReleaseUrl = updatedRelease.data.html_url;
         console.log('Release published');
