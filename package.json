@@ -22,13 +22,13 @@
     "@actions/core": "^3.0.1",
     "@actions/exec": "^3.0.0",
     "@actions/github": "^9.1.1",
-    "php-parser": "^3.6.0"
+    "php-parser": "^3.7.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "prettier": "^3.8.4",
-    "rollup": "^4.61.1",
+    "rollup": "^4.62.2",
     "shx": "^0.4.0"
   }
 }
