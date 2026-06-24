@@ -40,7 +40,7 @@ export default function resolveActionEnvironment() {
           tagName: tagName,
           version: versionMatch[2],
           prerelease:
-            versionMatch[2].match(/[^a-z](alpha|a|beta|b|rc|dev|pre|preview|snapshot)([.\-]\d+(\.\d+)*)?$/i) !== null,
+            versionMatch[2].match(/[^a-z](alpha|a|beta|b|rc|dev|pre|preview|snapshot)([.\-]?\d+(\.\d+)*)?$/i) !== null,
         };
       }
       console.log(
