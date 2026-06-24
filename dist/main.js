@@ -2729,6 +2729,7 @@ function requireDispatcherBase () {
 
 	  get webSocketOptions () {
 	    return {
+	      maxFragments: this[kWebSocketOptions].maxFragments ?? 131072,
 	      maxPayloadSize: this[kWebSocketOptions].maxPayloadSize ?? 128 * 1024 * 1024
 	    }
 	  }
@@ -8680,6 +8681,9 @@ function requireClientH1 () {
 	const FastBuffer = Buffer[Symbol.species];
 	const addListener = util.addListener;
 	const removeAllListeners = util.removeAllListeners;
+	const kIdleSocketValidation = Symbol('kIdleSocketValidation');
+	const kIdleSocketValidationTimeout = Symbol('kIdleSocketValidationTimeout');
+	const kSocketUsed = Symbol('kSocketUsed');
 
 	let extractBody;
 
@@ -8994,6 +8998,11 @@ function requireClientH1 () {
 	      return -1
 	    }
 
+	    if (client[kRunning] === 0) {
+	      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)));
+	      return -1
+	    }
+
 	    const request = client[kQueue][client[kRunningIdx]];
 	    if (!request) {
 	      return -1
@@ -9094,6 +9103,11 @@ function requireClientH1 () {
 
 	    /* istanbul ignore next: difficult to make a test case for */
 	    if (socket.destroyed) {
+	      return -1
+	    }
+
+	    if (client[kRunning] === 0) {
+	      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)));
 	      return -1
 	    }
 
@@ -9270,6 +9284,7 @@ function requireClientH1 () {
 	    request.onComplete(headers);
 
 	    client[kQueue][client[kRunningIdx]++] = null;
+	    socket[kSocketUsed] = true;
 
 	    if (socket[kWriting]) {
 	      assert(client[kRunning] === 0);
@@ -9328,6 +9343,9 @@ function requireClientH1 () {
 	  socket[kWriting] = false;
 	  socket[kReset] = false;
 	  socket[kBlocking] = false;
+	  socket[kIdleSocketValidation] = 0;
+	  socket[kIdleSocketValidationTimeout] = null;
+	  socket[kSocketUsed] = false;
 	  socket[kParser] = new Parser(client, socket, llhttpInstance);
 
 	  addListener(socket, 'error', function (err) {
@@ -9373,6 +9391,8 @@ function requireClientH1 () {
 	  addListener(socket, 'close', function () {
 	    const client = this[kClient];
 	    const parser = this[kParser];
+
+	    clearIdleSocketValidation(this);
 
 	    if (parser) {
 	      if (!this[kError] && parser.statusCode && !parser.shouldKeepAlive) {
@@ -9439,7 +9459,7 @@ function requireClientH1 () {
 	      return socket.destroyed
 	    },
 	    busy (request) {
-	      if (socket[kWriting] || socket[kReset] || socket[kBlocking]) {
+	      if (socket[kWriting] || socket[kReset] || socket[kBlocking] || socket[kIdleSocketValidation] === 1) {
 	        return true
 	      }
 
@@ -9477,6 +9497,31 @@ function requireClientH1 () {
 	  }
 	}
 
+	function clearIdleSocketValidation (socket) {
+	  if (socket[kIdleSocketValidationTimeout]) {
+	    clearTimeout(socket[kIdleSocketValidationTimeout]);
+	    socket[kIdleSocketValidationTimeout] = null;
+	  }
+
+	  socket[kIdleSocketValidation] = 0;
+	}
+
+	function scheduleIdleSocketValidation (client, socket) {
+	  socket[kIdleSocketValidation] = 1;
+	  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+	    socket[kIdleSocketValidationTimeout] = null;
+	    socket[kIdleSocketValidation] = 2;
+
+	    if (client[kSocket] === socket && !socket.destroyed) {
+	      client[kResume]();
+	    }
+	  }, 0);
+	  socket[kIdleSocketValidationTimeout].unref?.();
+	}
+
+	/**
+	 * @param {import('./client.js')} client
+	 */
 	function resumeH1 (client) {
 	  const socket = client[kSocket];
 
@@ -9489,6 +9534,32 @@ function requireClientH1 () {
 	    } else if (socket[kNoRef] && socket.ref) {
 	      socket.ref();
 	      socket[kNoRef] = false;
+	    }
+
+	    if (client[kRunning] === 0 && client[kPending] > 0 && socket[kSocketUsed]) {
+	      if (socket[kIdleSocketValidation] === 0) {
+	        scheduleIdleSocketValidation(client, socket);
+	        socket[kParser].readMore();
+	        if (socket.destroyed) {
+	          return
+	        }
+	        return
+	      }
+
+	      if (socket[kIdleSocketValidation] === 1) {
+	        socket[kParser].readMore();
+	        if (socket.destroyed) {
+	          return
+	        }
+	        return
+	      }
+	    }
+
+	    if (client[kRunning] === 0) {
+	      socket[kParser].readMore();
+	      if (socket.destroyed) {
+	        return
+	      }
 	    }
 
 	    if (client[kSize] === 0) {
@@ -9584,6 +9655,7 @@ function requireClientH1 () {
 	  }
 
 	  const socket = client[kSocket];
+	  clearIdleSocketValidation(socket);
 
 	  const abort = (err) => {
 	    if (request.aborted || request.completed) {
@@ -24066,32 +24138,25 @@ function requireParse () {
 	    // If the attribute-name case-insensitively matches the string
 	    // "SameSite", the user agent MUST process the cookie-av as follows:
 
-	    // 1. Let enforcement be "Default".
-	    let enforcement = 'Default';
-
 	    const attributeValueLowercase = attributeValue.toLowerCase();
-	    // 2. If cookie-av's attribute-value is a case-insensitive match for
-	    //    "None", set enforcement to "None".
-	    if (attributeValueLowercase.includes('none')) {
-	      enforcement = 'None';
-	    }
 
-	    // 3. If cookie-av's attribute-value is a case-insensitive match for
-	    //    "Strict", set enforcement to "Strict".
-	    if (attributeValueLowercase.includes('strict')) {
-	      enforcement = 'Strict';
+	    // 1. If cookie-av's attribute-value is a case-insensitive match for
+	    //    "None", append an attribute to the cookie-attribute-list with an
+	    //    attribute-name of "SameSite" and an attribute-value of "None".
+	    if (attributeValueLowercase === 'none') {
+	      cookieAttributeList.sameSite = 'None';
+	    } else if (attributeValueLowercase === 'strict') {
+	      // 2. If cookie-av's attribute-value is a case-insensitive match for
+	      //    "Strict", append an attribute to the cookie-attribute-list with
+	      //    an attribute-name of "SameSite" and an attribute-value of
+	      //    "Strict".
+	      cookieAttributeList.sameSite = 'Strict';
+	    } else if (attributeValueLowercase === 'lax') {
+	      // 3. If cookie-av's attribute-value is a case-insensitive match for
+	      //    "Lax", append an attribute to the cookie-attribute-list with an
+	      //    attribute-name of "SameSite" and an attribute-value of "Lax".
+	      cookieAttributeList.sameSite = 'Lax';
 	    }
-
-	    // 4. If cookie-av's attribute-value is a case-insensitive match for
-	    //    "Lax", set enforcement to "Lax".
-	    if (attributeValueLowercase.includes('lax')) {
-	      enforcement = 'Lax';
-	    }
-
-	    // 5. Append an attribute to the cookie-attribute-list with an
-	    //    attribute-name of "SameSite" and an attribute-value of
-	    //    enforcement.
-	    cookieAttributeList.sameSite = enforcement;
 	  } else {
 	    cookieAttributeList.unparsed ??= [];
 
@@ -25677,6 +25742,11 @@ function requireReceiver () {
 	const { PerMessageDeflate } = requirePermessageDeflate();
 	const { MessageSizeExceededError } = requireErrors();
 
+	function failWebsocketConnectionWithCode (ws, code, reason) {
+	  closeWebSocketConnection(ws, code, reason, Buffer.byteLength(reason));
+	  failWebsocketConnection(ws, reason);
+	}
+
 	// This code was influenced by ws released under the MIT license.
 	// Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com>
 	// Copyright (c) 2013 Arnout Kazemier and contributors
@@ -25697,18 +25767,22 @@ function requireReceiver () {
 	  #extensions
 
 	  /** @type {number} */
+	  #maxFragments
+
+	  /** @type {number} */
 	  #maxPayloadSize
 
 	  /**
 	   * @param {import('./websocket').WebSocket} ws
 	   * @param {Map<string, string>|null} extensions
-	   * @param {{ maxPayloadSize?: number }} [options]
+	   * @param {{ maxFragments?: number, maxPayloadSize?: number }} [options]
 	   */
 	  constructor (ws, extensions, options = {}) {
 	    super();
 
 	    this.ws = ws;
 	    this.#extensions = extensions == null ? new Map() : extensions;
+	    this.#maxFragments = options.maxFragments ?? 0;
 	    this.#maxPayloadSize = options.maxPayloadSize ?? 0;
 
 	    if (this.#extensions.has('permessage-deflate')) {
@@ -25732,9 +25806,9 @@ function requireReceiver () {
 	    if (
 	      this.#maxPayloadSize > 0 &&
 	      !isControlFrame(this.#info.opcode) &&
-	      this.#info.payloadLength > this.#maxPayloadSize
+	      this.#info.payloadLength + this.#fragmentsBytes > this.#maxPayloadSize
 	    ) {
-	      failWebsocketConnection(this.ws, 'Payload size exceeds maximum allowed size');
+	      failWebsocketConnectionWithCode(this.ws, 1009, 'Payload size exceeds maximum allowed size');
 	      return false
 	    }
 
@@ -25899,10 +25973,12 @@ function requireReceiver () {
 	          this.#state = parserStates.INFO;
 	        } else {
 	          if (!this.#info.compressed) {
-	            this.writeFragments(body);
+	            if (!this.writeFragments(body)) {
+	              return
+	            }
 
 	            if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
-	              failWebsocketConnection(this.ws, new MessageSizeExceededError().message);
+	              failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message);
 	              return
 	            }
 
@@ -25921,14 +25997,17 @@ function requireReceiver () {
 	              this.#info.fin,
 	              (error, data) => {
 	                if (error) {
-	                  failWebsocketConnection(this.ws, error.message);
+	                  const code = error instanceof MessageSizeExceededError ? 1009 : 1007;
+	                  failWebsocketConnectionWithCode(this.ws, code, error.message);
 	                  return
 	                }
 
-	                this.writeFragments(data);
+	                if (!this.writeFragments(data)) {
+	                  return
+	                }
 
 	                if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
-	                  failWebsocketConnection(this.ws, new MessageSizeExceededError().message);
+	                  failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message);
 	                  return
 	                }
 
@@ -25998,8 +26077,17 @@ function requireReceiver () {
 	  }
 
 	  writeFragments (fragment) {
+	    if (
+	      this.#maxFragments > 0 &&
+	      this.#fragments.length === this.#maxFragments
+	    ) {
+	      failWebsocketConnectionWithCode(this.ws, 1008, 'Too many message fragments');
+	      return false
+	    }
+
 	    this.#fragmentsBytes += fragment.length;
 	    this.#fragments.push(fragment);
+	    return true
 	  }
 
 	  consumeFragments () {
@@ -26702,9 +26790,12 @@ function requireWebsocket () {
 	    // once this happens, the connection is open
 	    this[kResponse] = response;
 
-	    const maxPayloadSize = this[kController]?.dispatcher?.webSocketOptions?.maxPayloadSize;
+	    const webSocketOptions = this[kController]?.dispatcher?.webSocketOptions;
+	    const maxFragments = webSocketOptions?.maxFragments;
+	    const maxPayloadSize = webSocketOptions?.maxPayloadSize;
 
 	    const parser = new ByteParser(this, parsedExtensions, {
+	      maxFragments,
 	      maxPayloadSize
 	    });
 	    parser.on('drain', onParserDrain);
@@ -33443,9 +33534,10 @@ function stringToArray(str) {
 
 /**
  * @param {any} str
+ * @param {boolean} [defaultValue=false]
  * @returns {boolean}
  */
-function stringToBool(str) {
+function stringToBool(str, defaultValue) {
   switch (typeof str) {
     case 'boolean':
       return str;
@@ -33464,7 +33556,7 @@ function stringToBool(str) {
       }
       return parseInt(str) ? true : false;
     default:
-      return false;
+      return defaultValue;
   }
 }
 
@@ -33500,8 +33592,8 @@ function resolveArguments() {
     token: resolveToken(),
     removeFiles: stringToArray(getInput('remove-files')),
     keepFiles: stringToArray(getInput('keep-files')),
-    publishRelease: stringToBool(getInput('publish-release')),
-    verbose: stringToBool(getInput('verbose')),
+    publishRelease: stringToBool(getInput('publish-release'), false),
+    verbose: stringToBool(getInput('verbose'), true),
   };
 }
 
@@ -36089,6 +36181,9 @@ function require_class$1 () {
 
 	      // check constant
 	      if (this.token === this.tok.T_CONST) {
+	        if (flags[0][1] !== -1) {
+	          this.raiseError("Cannot use asymmetric visibility on constants");
+	        }
 	        const constants = this.read_constant_list(flags, attrs, locStart);
 	        if (this.expect(";")) {
 	          this.next();
@@ -36100,7 +36195,7 @@ function require_class$1 () {
 	      // jump over T_VAR then land on T_VARIABLE
 	      if (allow_variables && this.token === this.tok.T_VAR) {
 	        this.next().expect(this.tok.T_VARIABLE);
-	        flags[0] = null; // public (as null)
+	        flags[0][0] = null; // public (as null)
 	        flags[1] = 0; // non static var
 	      }
 
@@ -36382,69 +36477,98 @@ function require_class$1 () {
 	  /*
 	   * Read member flags
 	   * @return array
-	   *  1st index : 0 => public, 1 => protected, 2 => private
+	   *  1st index : [get, set] visibility tuple
+	   *    get/set: -1 => no visibility, 0 => public, 1 => protected, 2 => private
 	   *  2nd index : 0 => instance member, 1 => static member
 	   *  3rd index : 0 => normal, 1 => abstract member, 2 => final member
+	   *  4th index : 0 => no readonly, 1 => readonly
 	   */
 	  read_member_flags(asInterface) {
-	    const result = [-1, -1, -1, -1];
-	    if (this.is("T_MEMBER_FLAGS")) {
-	      let idx = 0,
-	        val = 0;
-	      do {
-	        switch (this.token) {
-	          case this.tok.T_PUBLIC:
-	            idx = 0;
-	            val = 0;
-	            break;
-	          case this.tok.T_PROTECTED:
-	            idx = 0;
-	            val = 1;
-	            break;
-	          case this.tok.T_PRIVATE:
-	            idx = 0;
-	            val = 2;
-	            break;
-	          case this.tok.T_STATIC:
-	            idx = 1;
-	            val = 1;
-	            break;
-	          case this.tok.T_ABSTRACT:
-	            idx = 2;
-	            val = 1;
-	            break;
-	          case this.tok.T_FINAL:
-	            idx = 2;
-	            val = 2;
-	            break;
-	          case this.tok.T_READ_ONLY:
-	            idx = 3;
-	            val = 1;
-	            break;
-	        }
-	        if (asInterface) {
-	          if (idx === 0 && val === 2) {
+	    const result = [[-1, -1], 0, 0, 0];
+	    const seen = new Set();
+	    while (this.is("T_MEMBER_FLAGS")) {
+	      let idx = -1,
+	        val = -1;
+	      switch (this.token) {
+	        case this.tok.T_PUBLIC:
+	        case this.tok.T_PROTECTED:
+	        case this.tok.T_PRIVATE: {
+	          idx = 0;
+	          val =
+	            this.token === this.tok.T_PUBLIC
+	              ? 0
+	              : this.token === this.tok.T_PROTECTED
+	                ? 1
+	                : 2;
+	          if (asInterface && val === 2) {
 	            // an interface can't be private
 	            this.expect([this.tok.T_PUBLIC, this.tok.T_PROTECTED]);
 	            val = -1;
-	          } else if (idx === 2 && val === 1) {
-	            // an interface cant be abstract
-	            this.error();
-	            val = -1;
 	          }
+	          this.next(); // consume the visibility keyword
+	          if (this.version >= 804 && this.token === "(") {
+	            // visibility(set) modifier: e.g. private(set)
+	            // For shorthand, default get visibility to public if not already set
+	            if (result[0][0] === -1) {
+	              result[0][0] = 0;
+	            }
+	            this.next(); // consume '('
+	            if (this.token !== this.tok.T_STRING || this.text() !== "set") {
+	              this.error("set");
+	            } else {
+	              this.next(); // consume 'set'
+	            }
+	            if (this.expect(")")) {
+	              this.next(); // consume ')'
+	            }
+	            if (seen.has("set")) {
+	              this.error(); // set modifier already defined
+	            } else if (val !== -1) {
+	              seen.add("set");
+	              result[0][1] = val;
+	            }
+	            continue;
+	          }
+	          if (seen.has(idx)) {
+	            this.error();
+	          } else if (val !== -1) {
+	            seen.add(idx);
+	            result[0][0] = val;
+	          }
+	          continue;
 	        }
-	        if (result[idx] !== -1) {
-	          // already defined flag
-	          this.error();
-	        } else if (val !== -1) {
-	          result[idx] = val;
-	        }
-	      } while (this.next().is("T_MEMBER_FLAGS"));
+	        case this.tok.T_STATIC:
+	          idx = 1;
+	          val = 1;
+	          break;
+	        case this.tok.T_ABSTRACT:
+	          idx = 2;
+	          val = 1;
+	          break;
+	        case this.tok.T_FINAL:
+	          idx = 2;
+	          val = 2;
+	          break;
+	        case this.tok.T_READ_ONLY:
+	          idx = 3;
+	          val = 1;
+	          break;
+	      }
+	      if (asInterface && idx === 2 && val === 1) {
+	        // an interface can't be abstract
+	        this.error();
+	        val = -1;
+	      }
+	      if (seen.has(idx)) {
+	        // already defined flag
+	        this.error();
+	      } else if (val !== -1) {
+	        seen.add(idx);
+	        result[idx] = val;
+	      }
+	      this.next();
 	    }
 
-	    if (result[1] === -1) result[1] = 0;
-	    if (result[2] === -1) result[2] = 0;
-	    if (result[3] === -1) result[3] = 0;
 	    return result;
 	  },
 
@@ -36575,6 +36699,9 @@ function require_class$1 () {
 
 	      // check constant
 	      if (this.token === this.tok.T_CONST) {
+	        if (flags[0][1] !== -1) {
+	          this.raiseError("Cannot use asymmetric visibility on constants");
+	        }
 	        const constants = this.read_constant_list(flags, attrs, locStart);
 	        if (this.expect(";")) {
 	          this.next();
@@ -37177,7 +37304,8 @@ function requireExpr () {
 	      this.next();
 	      if (this.version >= 805 && this.token === "(") {
 	        this.next();
-	        const what = this.read_expr();
+	        let what = this.read_variable(false, false);
+	        what = this.handleDereferencable(what);
 	        let properties = null;
 	        if (this.token === ",") {
 	          properties = this.next().read_expr();
@@ -37185,7 +37313,9 @@ function requireExpr () {
 	        this.expect(")") && this.next();
 	        return node(what, properties);
 	      }
-	      return node(this.read_expr(), null);
+	      let what = this.read_variable(false, false);
+	      what = this.handleDereferencable(what);
+	      return node(what, null);
 	    }
 
 	    switch (this.token) {
@@ -38047,7 +38177,7 @@ function require_function$1 () {
 	      }
 	    }
 
-	    const flags = this.read_promoted();
+	    const [flags, flagsSet] = this.read_promoted();
 
 	    if (
 	      !readonly &&
@@ -38099,6 +38229,7 @@ function require_function$1 () {
 	      nullable,
 	      flags,
 	      hooks,
+	      flagsSet,
 	    );
 	    if (attrs) result.attrGroups = attrs;
 	    return result;
@@ -38166,17 +38297,67 @@ function require_function$1 () {
 	    const MODIFIER_PUBLIC = 1;
 	    const MODIFIER_PROTECTED = 2;
 	    const MODIFIER_PRIVATE = 4;
+
+	    let firstModifier;
 	    if (this.token === this.tok.T_PUBLIC) {
 	      this.next();
-	      return MODIFIER_PUBLIC;
+	      firstModifier = MODIFIER_PUBLIC;
 	    } else if (this.token === this.tok.T_PROTECTED) {
 	      this.next();
-	      return MODIFIER_PROTECTED;
+	      firstModifier = MODIFIER_PROTECTED;
 	    } else if (this.token === this.tok.T_PRIVATE) {
 	      this.next();
-	      return MODIFIER_PRIVATE;
+	      firstModifier = MODIFIER_PRIVATE;
+	    } else {
+	      return [0, 0];
 	    }
-	    return 0;
+
+	    // PHP 8.4+ asymmetric visibility
+	    if (this.version >= 804) {
+	      if (this.token === "(") {
+	        // shorthand: visibility(set) — firstModifier is the set modifier, read visibility is implicit
+	        this.next(); // consume '('
+	        if (this.token !== this.tok.T_STRING || this.text() !== "set") {
+	          this.error("set");
+	        } else {
+	          this.next(); // consume 'set'
+	        }
+	        if (this.expect(")")) {
+	          this.next(); // consume ')'
+	        }
+	        return [0, firstModifier]; // no explicit read visibility, set = firstModifier
+	      }
+
+	      // Check for explicit form: readVisibility setVisibility(set)
+	      let setModifier = 0;
+	      if (this.token === this.tok.T_PUBLIC) {
+	        this.next();
+	        setModifier = MODIFIER_PUBLIC;
+	      } else if (this.token === this.tok.T_PROTECTED) {
+	        this.next();
+	        setModifier = MODIFIER_PROTECTED;
+	      } else if (this.token === this.tok.T_PRIVATE) {
+	        this.next();
+	        setModifier = MODIFIER_PRIVATE;
+	      }
+
+	      if (setModifier > 0) {
+	        if (this.expect("(")) {
+	          this.next(); // consume '('
+	        }
+	        if (this.token !== this.tok.T_STRING || this.text() !== "set") {
+	          this.error("set");
+	        } else {
+	          this.next(); // consume 'set'
+	        }
+	        if (this.expect(")")) {
+	          this.next(); // consume ')'
+	        }
+	        return [firstModifier, setModifier];
+	      }
+	    }
+
+	    return [firstModifier, 0];
 	  },
 	  /*
 	   * Reads a list of arguments
@@ -42374,12 +42555,15 @@ function requireDeclaration () {
 	const IS_PROTECTED = "protected";
 	const IS_PRIVATE = "private";
 
+	const VISIBILITY_MAP = [IS_PUBLIC, IS_PROTECTED, IS_PRIVATE];
+
 	/**
 	 * A declaration statement (function, class, interface...)
 	 * @constructor Declaration
 	 * @memberOf module:php-parser
 	 * @extends {Statement}
 	 * @property {Identifier|string} name
+	 * @property {string|null} visibilitySet
 	 */
 	const Declaration = Statement.extends(
 	  KIND,
@@ -42402,19 +42586,17 @@ function requireDeclaration () {
 	  this.isFinal = flags[2] === 2;
 	  this.isReadonly = flags[3] === 1;
 	  if (this.kind !== "class") {
-	    if (flags[0] === -1) {
+	    const [getVis, setVis] = flags[0];
+	    if (getVis === -1) {
 	      this.visibility = IS_UNDEFINED;
-	    } else if (flags[0] === null) {
+	    } else if (getVis === null) {
 	      /* istanbul ignore next */
 	      this.visibility = null;
-	    } else if (flags[0] === 0) {
-	      this.visibility = IS_PUBLIC;
-	    } else if (flags[0] === 1) {
-	      this.visibility = IS_PROTECTED;
-	    } else if (flags[0] === 2) {
-	      this.visibility = IS_PRIVATE;
+	    } else {
+	      this.visibility = VISIBILITY_MAP[getVis];
 	    }
 	    this.isStatic = flags[1] === 1;
+	    this.visibilitySet = setVis !== -1 ? VISIBILITY_MAP[setVis] : null;
 	  }
 	};
 
@@ -42561,16 +42743,17 @@ function requireClassconstant () {
 	 * @return {void}
 	 */
 	ClassConstant.prototype.parseFlags = function (flags) {
-	  if (flags[0] === -1) {
+	  const getVis = flags[0][0];
+	  if (getVis === -1) {
 	    this.visibility = IS_UNDEFINED;
-	  } else if (flags[0] === null) {
+	  } else if (getVis === null) {
 	    /* istanbul ignore next */
 	    this.visibility = null;
-	  } else if (flags[0] === 0) {
+	  } else if (getVis === 0) {
 	    this.visibility = IS_PUBLIC;
-	  } else if (flags[0] === 1) {
+	  } else if (getVis === 1) {
 	    this.visibility = IS_PROTECTED;
-	  } else if (flags[0] === 2) {
+	  } else if (getVis === 2) {
 	    this.visibility = IS_PRIVATE;
 	  }
 	  this.final = flags[2] === 2;
@@ -44558,6 +44741,7 @@ function requireParameter () {
 	 * @property {AttrGroup[]} attrGroups
 	 * @property {MODIFIER_PUBLIC|MODIFIER_PROTECTED|MODIFIER_PRIVATE} flags
 	 * @property {PropertyHook[]} hooks
+	 * @property {MODIFIER_PUBLIC|MODIFIER_PROTECTED|MODIFIER_PRIVATE} flagsSet
 	 */
 	parameter = Declaration.extends(
 	  KIND,
@@ -44571,6 +44755,7 @@ function requireParameter () {
 	    nullable,
 	    flags,
 	    hooks,
+	    flagsSet,
 	    docs,
 	    location,
 	  ) {
@@ -44583,6 +44768,7 @@ function requireParameter () {
 	    this.nullable = nullable;
 	    this.flags = flags || 0;
 	    this.hooks = hooks || [];
+	    this.flagsSet = flagsSet || 0;
 	    this.attrGroups = [];
 	  },
 	);
@@ -44926,6 +45112,8 @@ function requirePropertystatement () {
 	const IS_PROTECTED = "protected";
 	const IS_PRIVATE = "private";
 
+	const VISIBILITY_MAP = [IS_PUBLIC, IS_PROTECTED, IS_PRIVATE];
+
 	/**
 	 * Declares a properties into the current scope
 	 * @constructor PropertyStatement
@@ -44933,6 +45121,7 @@ function requirePropertystatement () {
 	 * @extends {Statement}
 	 * @property {Property[]} properties
 	 * @property {string|null} visibility
+	 * @property {string|null} visibilitySet
 	 * @property {boolean} isStatic
 	 * @property {boolean} isAbstract
 	 * @property {boolean} isFinal
@@ -44954,21 +45143,19 @@ function requirePropertystatement () {
 	 * @return {void}
 	 */
 	PropertyStatement.prototype.parseFlags = function (flags) {
-	  if (flags[0] === -1) {
+	  const [getVis, setVis] = flags[0];
+	  if (getVis === -1) {
 	    this.visibility = IS_UNDEFINED;
-	  } else if (flags[0] === null) {
+	  } else if (getVis === null) {
 	    this.visibility = null;
-	  } else if (flags[0] === 0) {
-	    this.visibility = IS_PUBLIC;
-	  } else if (flags[0] === 1) {
-	    this.visibility = IS_PROTECTED;
-	  } else if (flags[0] === 2) {
-	    this.visibility = IS_PRIVATE;
+	  } else {
+	    this.visibility = VISIBILITY_MAP[getVis];
 	  }
 
 	  this.isStatic = flags[1] === 1;
 	  this.isAbstract = flags[2] === 1;
 	  this.isFinal = flags[2] === 2;
+	  this.visibilitySet = setVis !== -1 ? VISIBILITY_MAP[setVis] : null;
 	};
 
 	propertystatement = PropertyStatement;
@@ -45417,11 +45604,12 @@ function requireTraitalias () {
 	    this.as = as;
 	    this.visibility = IS_UNDEFINED;
 	    if (flags) {
-	      if (flags[0] === 0) {
+	      const getVis = flags[0][0];
+	      if (getVis === 0) {
 	        this.visibility = IS_PUBLIC;
-	      } else if (flags[0] === 1) {
+	      } else if (getVis === 1) {
 	        this.visibility = IS_PROTECTED;
-	      } else if (flags[0] === 2) {
+	      } else if (getVis === 2) {
 	        this.visibility = IS_PRIVATE;
 	      }
 	    }
@@ -46164,10 +46352,11 @@ function requireAst () {
 	  ["*", "/", "%"],
 	  ["!"],
 	  ["instanceof"],
+	  ["u-", "u+", "u~"],
 	  ["cast", "silent"],
 	  ["**"],
 	  // TODO: [ (array)
-	  // TODO: clone, new
+	  // TODO: new
 	].forEach(function (list, index) {
 	  list.forEach(function (operator) {
 	    AST.precedence[operator] = index + 1;
@@ -46313,7 +46502,9 @@ function requireAst () {
 	    // https://github.com/glayzzle/php-parser/issues/75
 	    if (result.what && !result.what.parenthesizedExpression) {
 	      if (result.what.kind === "bin") {
-	        lLevel = AST.precedence[result.type];
+	        // use the unary-specific precedence (u-, u+, u~) which is higher than binary - and +
+	        lLevel =
+	          AST.precedence["u" + result.type] || AST.precedence[result.type];
 	        rLevel = AST.precedence[result.what.type];
 	        if (lLevel && rLevel && rLevel < lLevel) {
 	          buffer = result.what;
@@ -47334,6 +47525,7 @@ async function run() {
     }
     const args = resolveArguments();
     if (args.verbose) {
+      console.log(`Resolved environment:\n${JSON.stringify(actionEnvironment, null, 2)}`);
       await dumpEnvironment();
     }
     const client = getOctokit(args.token);
@@ -47370,10 +47562,7 @@ async function run() {
           releaseId = actionEnvironment.releaseId;
           break;
         case 'createRelease':
-          console.log(
-            `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}'...`,
-          );
-          const releaseResponse = await client.rest.repos.createRelease({
+          const createReleaseRequestBody = {
             owner: context.repo.owner,
             repo: context.repo.repo,
             tag_name: actionEnvironment.tagName,
@@ -47382,7 +47571,13 @@ async function run() {
             draft: true,
             prerelease: actionEnvironment.prerelease,
             make_latest: actionEnvironment.prerelease ? 'false' : 'true',
-          });
+          };
+          if (args.verbose) {
+            console.log(
+              `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}' with:\n${JSON.stringify(createReleaseRequestBody, null, 2)}`,
+            );
+          }
+          const releaseResponse = await client.rest.repos.createRelease(createReleaseRequestBody);
           releaseId = releaseResponse.data.id;
           newlyCreatedReleaseUrl = releaseResponse.data.html_url;
           console.log(`Draft release created (ID: ${releaseId})`);
@@ -47393,9 +47588,11 @@ async function run() {
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
-      console.log(
-        `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
-      );
+      if (args.verbose) {
+        console.log(
+          `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
+        );
+      }
       await client.rest.repos.uploadReleaseAsset({
         owner: context.repo.owner,
         repo: context.repo.repo,
@@ -47409,15 +47606,20 @@ async function run() {
       });
       console.log('ZIP file attached to release');
       if (publishRelease) {
-        console.log(`Publishing release (ID: ${releaseId})...`);
-        const updatedRelease = await client.rest.repos.updateRelease({
+        const updateReleaseRequestBody = {
           owner: context.repo.owner,
           repo: context.repo.repo,
           release_id: releaseId,
           draft: false,
           prerelease: actionEnvironment.prerelease,
           make_latest: actionEnvironment.prerelease ? 'false' : 'true',
-        });
+        };
+        if (args.verbose) {
+          console.log(
+            `Publishing release (ID: ${releaseId}) with:\n${JSON.stringify(updateReleaseRequestBody, null, 2)}`,
+          );
+        }
+        const updatedRelease = await client.rest.repos.updateRelease(updateReleaseRequestBody);
         newlyCreatedReleaseUrl = updatedRelease.data.html_url;
         console.log('Release published');
       }
