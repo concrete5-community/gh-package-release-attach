@@ -21,9 +21,9 @@ inputs:
     required: false
     default: ${{ github.token }}
   verbose:
-    description: "Set to 1 to have a more verbose output"
+    description: "Set to false to have a less verbose output"
     required: false
-    default: "0"
+    default: "true"
 runs:
   using: "node24"
   main: "dist/main.js"

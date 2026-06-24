@@ -194,12 +194,12 @@ If your package can be installed with Composer, you can't add mark `composer.jso
 
 But `composer.json` can be omitted in the ZIP archives containing your package, so you can configure the `concrete5-community/gh-package-release-attach` action to exclude it (see the `remove-files` section in the above sample GitHub workflow).
 
-## Increase verbosity
+## Decrease verbosity
 
-You can increase the output verbosity by setting the `verbose` parameter to `true`:
+You can decrease the output verbosity by setting the `verbose` parameter to `false`:
 
 ```yaml
 - uses: concrete5-community/gh-package-release-attach@main
   with:
-    verbose: true
+    verbose: false
 ```

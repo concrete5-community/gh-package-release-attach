@@ -22,6 +22,7 @@ async function run() {
     }
     const args = resolveArguments();
     if (args.verbose) {
+      console.log(`Resolved environment:\n${JSON.stringify(actionEnvironment, null, 2)}`);
       await dumpEnvironment();
     }
     const client = getOctokit(args.token);
@@ -58,10 +59,7 @@ async function run() {
           releaseId = actionEnvironment.releaseId;
           break;
         case 'createRelease':
-          console.log(
-            `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}'...`,
-          );
-          const releaseResponse = await client.rest.repos.createRelease({
+          const createReleaseRequestBody = {
             owner: context.repo.owner,
             repo: context.repo.repo,
             tag_name: actionEnvironment.tagName,
@@ -70,7 +68,13 @@ async function run() {
             draft: true,
             prerelease: actionEnvironment.prerelease,
             make_latest: actionEnvironment.prerelease ? 'false' : 'true',
-          });
+          };
+          if (args.verbose) {
+            console.log(
+              `Creating draft release for tag '${actionEnvironment.tagName}' on repository '${context.repo.owner}/${context.repo.repo}' with:\n${JSON.stringify(createReleaseRequestBody, null, 2)}`,
+            );
+          }
+          const releaseResponse = await client.rest.repos.createRelease(createReleaseRequestBody);
           releaseId = releaseResponse.data.id;
           newlyCreatedReleaseUrl = releaseResponse.data.html_url;
           console.log(`Draft release created (ID: ${releaseId})`);
@@ -81,9 +85,11 @@ async function run() {
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
-      console.log(
-        `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
-      );
+      if (args.verbose) {
+        console.log(
+          `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
+        );
+      }
       await client.rest.repos.uploadReleaseAsset({
         owner: context.repo.owner,
         repo: context.repo.repo,
@@ -97,15 +103,20 @@ async function run() {
       });
       console.log('ZIP file attached to release');
       if (publishRelease) {
-        console.log(`Publishing release (ID: ${releaseId})...`);
-        const updatedRelease = await client.rest.repos.updateRelease({
+        const updateReleaseRequestBody = {
           owner: context.repo.owner,
           repo: context.repo.repo,
           release_id: releaseId,
           draft: false,
           prerelease: actionEnvironment.prerelease,
           make_latest: actionEnvironment.prerelease ? 'false' : 'true',
-        });
+        };
+        if (args.verbose) {
+          console.log(
+            `Publishing release (ID: ${releaseId}) with:\n${JSON.stringify(updateReleaseRequestBody, null, 2)}`,
+          );
+        }
+        const updatedRelease = await client.rest.repos.updateRelease(updateReleaseRequestBody);
         newlyCreatedReleaseUrl = updatedRelease.data.html_url;
         console.log('Release published');
       }

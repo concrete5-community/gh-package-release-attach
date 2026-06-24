@@ -25,9 +25,10 @@ function stringToArray(str) {
 
 /**
  * @param {any} str
+ * @param {boolean} [defaultValue=false]
  * @returns {boolean}
  */
-function stringToBool(str) {
+function stringToBool(str, defaultValue) {
   switch (typeof str) {
     case 'boolean':
       return str;
@@ -46,7 +47,7 @@ function stringToBool(str) {
       }
       return parseInt(str) ? true : false;
     default:
-      return false;
+      return defaultValue;
   }
 }
 
@@ -82,7 +83,7 @@ export default function resolveArguments() {
     token: resolveToken(),
     removeFiles: stringToArray(getInput('remove-files')),
     keepFiles: stringToArray(getInput('keep-files')),
-    publishRelease: stringToBool(getInput('publish-release')),
-    verbose: stringToBool(getInput('verbose')),
+    publishRelease: stringToBool(getInput('publish-release'), false),
+    verbose: stringToBool(getInput('verbose'), true),
   };
 }
