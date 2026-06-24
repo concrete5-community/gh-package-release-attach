@@ -1,3 +1,5 @@
+[![Continuous Integration](https://github.com/concrete5-community/gh-package-release-attach/actions/workflows/ci.yml/badge.svg)](https://github.com/concrete5-community/gh-package-release-attach/actions/workflows/ci.yml)
+
 # GitHub Action to create ZIP archives for concrete5/ConcreteCMS packages
 
 You can use this GitHub Action to automatically attach a ZIP archive of your Concrete package to GitHub Releases when you publish them or to prepare a GitHub Release when you push a version-like tag (eg `1.2.3` or `v1.2.3`).
