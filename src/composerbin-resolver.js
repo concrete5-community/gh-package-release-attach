@@ -1,5 +1,5 @@
 import {join as joinPath} from 'node:path';
-import {createWriteStream} from 'node:fs';
+import * as fs from 'node:fs/promises';
 import {Readable} from 'node:stream';
 
 /**
@@ -20,14 +20,9 @@ export default async function resolveComposerBin(temporaryDirectory, useComposer
     throw new Error('No response body while fetching composerpkg');
   }
   const composerpkg = joinPath(temporaryDirectory, 'composerpkg');
-  const file = createWriteStream(composerpkg);
-  try {
-    await Readable.fromWeb(response.body).pipe(file);
-  } finally {
-    file.close();
-  }
+  await fs.writeFile(composerpkg, Readable.fromWeb(response.body));
   const deltaTime = Date.now() - startTime;
-  console.log(`composerpkg downloaded in ${Math.ceil(deltaTime * 100) / 100} ms`);
+  console.log(`composerpkg downloaded in ${deltaTime} ms`);
 
   return ['php', composerpkg];
 }
