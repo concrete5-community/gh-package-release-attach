@@ -21,7 +21,7 @@ function stringToArray(str) {
 
 /**
  * @param {any} str
- * @param {boolean} [defaultValue=false]
+ * @param {boolean} defaultValue
  * @returns {boolean}
  */
 function stringToBool(str, defaultValue) {
