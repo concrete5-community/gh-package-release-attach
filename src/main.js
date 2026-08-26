@@ -96,7 +96,6 @@ async function run() {
         release_id: releaseId,
         headers: {
           'content-type': 'application/zip',
-          'content-length': zipFileSize,
         },
         name: zipFilename,
         data: zipFileBytes,
