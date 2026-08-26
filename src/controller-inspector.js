@@ -165,7 +165,7 @@ export default async function parseFile(path) {
   if (pkgHandle === undefined) {
     throw new Error('Unable to find the Controller::$pkgHandle property');
   }
-  if (!/^[A-Za-z0-9_]+/.test(pkgHandle)) {
+  if (!/^[A-Za-z0-9_]+$/.test(pkgHandle)) {
     throw new Error(`The value of the Controller::$pkgHandle property ('${pkgHandle}') is not a valid Concrete handle`);
   }
   const pkgVersion = findTextProperty(controllerClass.body, 'pkgVersion');
