@@ -30,7 +30,7 @@ export default function resolveActionEnvironment() {
         `The release is not published yet, skipping the upload of the zip file (action: ${JSON.stringify(context.payload?.action ?? null)})`,
       );
       return null;
-    case 'push':
+    case 'push': {
       const tagMatch = context?.ref?.match(/^refs\/tags\/(.+)$/);
       const tagName = tagMatch ? tagMatch[1] : null;
       const versionMatch = tagName ? tagName.match(/^(v\.?)?(\d+\.\d+.*)$/i) : null;
@@ -47,6 +47,7 @@ export default function resolveActionEnvironment() {
         `Not pushing a version-like tag, skipping the creation of a draft release (ref: ${JSON.stringify(context.ref ?? null)})`,
       );
       return null;
+    }
     default:
       console.log(
         `Unsupported event type '${context.eventName}', skipping the upload of the zip file (supported events are 'release' and 'push' of version-like tags)`,
