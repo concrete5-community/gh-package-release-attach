@@ -37,7 +37,6 @@ import 'child_process';
 import 'timers';
 import { env } from 'node:process';
 import { spawn, exec } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
 
 class Context {
     /**
@@ -33889,6 +33888,14 @@ function setFailed(message) {
 function error$1(message, properties = {}) {
     issueCommand('error', toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+/**
+ * Adds a warning issue
+ * @param message warning issue message. Errors will be converted to string via toString()
+ * @param properties optional properties to add to the annotation.
+ */
+function warning(message, properties = {}) {
+    issueCommand('warning', toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
 
 /**
  * @typedef {Object} AttachZipToRelease
@@ -33920,7 +33927,7 @@ function resolveActionEnvironment() {
         `The release is not published yet, skipping the upload of the zip file (action: ${JSON.stringify(context.payload?.action ?? null)})`,
       );
       return null;
-    case 'push':
+    case 'push': {
       const tagMatch = context?.ref?.match(/^refs\/tags\/(.+)$/);
       const tagName = tagMatch ? tagMatch[1] : null;
       const versionMatch = tagName ? tagName.match(/^(v\.?)?(\d+\.\d+.*)$/i) : null;
@@ -33937,6 +33944,7 @@ function resolveActionEnvironment() {
         `Not pushing a version-like tag, skipping the creation of a draft release (ref: ${JSON.stringify(context.ref ?? null)})`,
       );
       return null;
+    }
     default:
       console.log(
         `Unsupported event type '${context.eventName}', skipping the upload of the zip file (supported events are 'release' and 'push' of version-like tags)`,
@@ -33954,22 +33962,18 @@ function stringToArray(str) {
   if (typeof str !== 'string' || str === '') {
     return result;
   }
-  str
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\r')
-    .split(/\n/)
-    .forEach((line) => {
-      line = line.replace(/^\s+|\s+$/g, '');
-      if (line !== '') {
-        result.push(line);
-      }
-    });
+  str.split(/\r\n|[\r\n]/).forEach((line) => {
+    line = line.replace(/^\s+|\s+$/g, '');
+    if (line !== '') {
+      result.push(line);
+    }
+  });
   return result;
 }
 
 /**
  * @param {any} str
- * @param {boolean} [defaultValue=false]
+ * @param {boolean} defaultValue
  * @returns {boolean}
  */
 function stringToBool(str, defaultValue) {
@@ -34033,6 +34037,24 @@ function resolveArguments() {
 }
 
 /**
+ * @param {import('node:child_process').ChildProcess} childProcess
+ * @param {boolean} isExec
+ * @param {number|null} code
+ * @param {NodeJS.Signals|null} signal
+ * @returns {string}
+ */
+function describeFailure(childProcess, isExec, code, signal) {
+  // With exec() the spawned file is the shell itself: the actual command line is its last argument
+  const command =
+    (isExec ? childProcess.spawnargs?.[childProcess.spawnargs.length - 1] : childProcess.spawnfile) ||
+    'The child process';
+  if (signal) {
+    return `${command} has been killed by the signal ${signal}`;
+  }
+  return `${command} failed with exit code ${code}`;
+}
+
+/**
  * @param {import('node:child_process').ChildProcess | import('node:child_process').ChildProcessWithoutNullStreams} childProcess
  * @param {boolean} isExec
  * @return {Promise<void>}
@@ -34050,28 +34072,26 @@ async function awaitChildProcess (childProcess, isExec = false) {
   }
   await new Promise((resolve, reject) => {
     let completed = false;
-    childProcess.on('exit', (code) => {
+    childProcess.on('exit', (code, signal) => {
       if (completed) {
         return;
       }
       completed = true;
       if (code === 0) {
         resolve();
-      } else if (isExec) {
-        reject(stdErr || stdOut || 'No output');
-      } else {
-        reject();
+        return;
       }
+      const description = describeFailure(childProcess, isExec, code, signal);
+      const output = isExec ? (stdErr || stdOut).replace(/\s+$/, '') : '';
+      reject(new Error(output ? `${description}:\n${output}` : description));
     });
     childProcess.on('error', (err) => {
       if (completed) {
         return;
       }
       completed = true;
-      if (isExec && (stdErr || stdOut)) {
-        err = new Error(stdErr || stdOut);
-      }
-      reject(err);
+      const output = isExec ? (stdErr || stdOut).replace(/\s+$/, '') : '';
+      reject(output ? new Error(`${err.message}:\n${output}`) : err);
     });
   });
 }
@@ -34090,9 +34110,17 @@ async function run$1(command, args) {
  */
 async function dumpEnvironment() {
   console.log('PHP Version:\n');
-  await run$1('php', ['-v']);
+  try {
+    await run$1('php', ['-v']);
+  } catch (error) {
+    warning(`Failed to get PHP version: ${error?.message || error}`);
+  }
   console.log('Composer Version:\n');
-  await run$1('composer', ['--version']);
+  try {
+    await run$1('composer', ['--version']);
+  } catch (error) {
+    warning(`Failed to get Composer version: ${error?.message || error}`);
+  }
 }
 
 var src = {exports: {}};
@@ -47667,14 +47695,14 @@ async function parseFile$1(path) {
   if (pkgHandle === undefined) {
     throw new Error('Unable to find the Controller::$pkgHandle property');
   }
-  if (!/^[A-Za-z0-9_]+/.test(pkgHandle)) {
+  if (!/^[A-Za-z0-9_]+$/.test(pkgHandle)) {
     throw new Error(`The value of the Controller::$pkgHandle property ('${pkgHandle}') is not a valid Concrete handle`);
   }
   const pkgVersion = findTextProperty(controllerClass.body, 'pkgVersion');
   if (pkgVersion === undefined) {
     throw new Error('Unable to find the Controller::$pkgVersion property');
   }
-  if (!/^[0-9]+[0-9a-zA-Z\-_.]*/.test(pkgVersion)) {
+  if (!/^[0-9]+[0-9a-zA-Z\-_.]*$/.test(pkgVersion)) {
     throw new Error(`The value of the Controller::$pkgVersion property ('${pkgVersion}') is not valid`);
   }
   console.log(`Found package '${pkgHandle}' at version '${pkgVersion}'`);
@@ -47801,14 +47829,9 @@ async function resolveComposerBin(temporaryDirectory, useComposerPkg) {
     throw new Error('No response body while fetching composerpkg');
   }
   const composerpkg = join(temporaryDirectory, 'composerpkg');
-  const file = createWriteStream(composerpkg);
-  try {
-    await Readable.fromWeb(response.body).pipe(file);
-  } finally {
-    file.close();
-  }
+  await fs$1.writeFile(composerpkg, Readable.fromWeb(response.body));
   const deltaTime = Date.now() - startTime;
-  console.log(`composerpkg downloaded in ${Math.ceil(deltaTime * 100) / 100} ms`);
+  console.log(`composerpkg downloaded in ${deltaTime} ms`);
 
   return ['php', composerpkg];
 }
@@ -47818,9 +47841,9 @@ async function resolveComposerBin(temporaryDirectory, useComposerPkg) {
  * @returns {Promise<void>}
  */
 async function exportRepository(destinationDirectory) {
-  const spawned = exec(
-    `git archive --format=tar HEAD | tar x -C '${destinationDirectory.replace(/(['$\\])/g, '\\$1')}'`,
-  );
+  const spawned = exec('git archive --format=tar HEAD | tar x -C "$EXPORT_DESTINATION_DIRECTORY"', {
+    env: {...env, EXPORT_DESTINATION_DIRECTORY: destinationDirectory},
+  });
   await awaitChildProcess(spawned, true);
   console.log(`The repository has been exported to ${destinationDirectory}`);
 }
@@ -47913,7 +47936,7 @@ async function copyAdditionalFiles(workingDirectory, list) {
   for (const item of list) {
     const fullPath = join(workingDirectory, item);
     if (await isFile(fullPath)) {
-      return;
+      continue;
     }
     await fs$1.copyFile(item, fullPath);
     console.log(`Copied additional file: '${item}'`);
@@ -47929,7 +47952,7 @@ async function removeAdditionalFiles(workingDirectory, list) {
   for (const item of list) {
     const fullPath = join(workingDirectory, item);
     if (!(await isFile(fullPath))) {
-      return;
+      continue;
     }
     await fs$1.rm(fullPath);
     console.log(`Removed additional file: '${item}'`);
@@ -47996,7 +48019,7 @@ async function run() {
         case 'attachZipToRelease':
           releaseId = actionEnvironment.releaseId;
           break;
-        case 'createRelease':
+        case 'createRelease': {
           const createReleaseRequestBody = {
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -48020,6 +48043,7 @@ async function run() {
             publishRelease = true;
           }
           break;
+        }
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
