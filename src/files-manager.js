@@ -31,7 +31,7 @@ export async function copyAdditionalFiles(workingDirectory, list) {
   for (const item of list) {
     const fullPath = joinPath(workingDirectory, item);
     if (await isFile(fullPath)) {
-      return;
+      continue;
     }
     await fs.copyFile(item, fullPath);
     console.log(`Copied additional file: '${item}'`);
@@ -47,7 +47,7 @@ export async function removeAdditionalFiles(workingDirectory, list) {
   for (const item of list) {
     const fullPath = joinPath(workingDirectory, item);
     if (!(await isFile(fullPath))) {
-      return;
+      continue;
     }
     await fs.rm(fullPath);
     console.log(`Removed additional file: '${item}'`);
