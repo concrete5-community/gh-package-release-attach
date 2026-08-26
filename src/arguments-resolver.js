@@ -10,16 +10,12 @@ function stringToArray(str) {
   if (typeof str !== 'string' || str === '') {
     return result;
   }
-  str
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\r')
-    .split(/\n/)
-    .forEach((line) => {
-      line = line.replace(/^\s+|\s+$/g, '');
-      if (line !== '') {
-        result.push(line);
-      }
-    });
+  str.split(/\r\n|[\r\n]/).forEach((line) => {
+    line = line.replace(/^\s+|\s+$/g, '');
+    if (line !== '') {
+      result.push(line);
+    }
+  });
   return result;
 }
 
