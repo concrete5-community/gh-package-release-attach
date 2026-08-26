@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {warning} from '@actions/core';
 import awaitChildProcess from './childprocess-awaiter.js';
 
 /**
@@ -15,7 +16,15 @@ async function run(command, args) {
  */
 export default async function dumpEnvironment() {
   console.log('PHP Version:\n');
-  await run('php', ['-v']);
+  try {
+    await run('php', ['-v']);
+  } catch (error) {
+    warning(`Failed to get PHP version: ${error?.message || error}`);
+  }
   console.log('Composer Version:\n');
-  await run('composer', ['--version']);
+  try {
+    await run('composer', ['--version']);
+  } catch (error) {
+    warning(`Failed to get Composer version: ${error?.message || error}`);
+  }
 }

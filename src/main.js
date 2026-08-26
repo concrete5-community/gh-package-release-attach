@@ -58,7 +58,7 @@ async function run() {
         case 'attachZipToRelease':
           releaseId = actionEnvironment.releaseId;
           break;
-        case 'createRelease':
+        case 'createRelease': {
           const createReleaseRequestBody = {
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -82,6 +82,7 @@ async function run() {
             publishRelease = true;
           }
           break;
+        }
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
