@@ -172,7 +172,7 @@ export default async function parseFile(path) {
   if (pkgVersion === undefined) {
     throw new Error('Unable to find the Controller::$pkgVersion property');
   }
-  if (!/^[0-9]+[0-9a-zA-Z\-_.]*/.test(pkgVersion)) {
+  if (!/^[0-9]+[0-9a-zA-Z\-_.]*$/.test(pkgVersion)) {
     throw new Error(`The value of the Controller::$pkgVersion property ('${pkgVersion}') is not valid`);
   }
   console.log(`Found package '${pkgHandle}' at version '${pkgVersion}'`);
