@@ -47975,6 +47975,27 @@ async function createZip(parentDirectory, subdirectoryName, zipFile) {
   return stat.size;
 }
 
+/**
+ * Delete a draft release that we created but that we couldn't publish, ignoring any error.
+ *
+ * @param {ReturnType<typeof getOctokit>} client
+ * @param {number} releaseId
+ * @returns {Promise<void>}
+ */
+async function deleteRelease(client, releaseId) {
+  console.log(`Deleting the draft release (ID: ${releaseId})...`);
+  try {
+    await client.rest.repos.deleteRelease({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      release_id: releaseId,
+    });
+    console.log('Draft release deleted');
+  } catch (error) {
+    warning(`Failed to delete the draft release (ID: ${releaseId}): ${error?.message || error}`);
+  }
+}
+
 async function run() {
   try {
     const actionEnvironment = resolveActionEnvironment();
@@ -48015,6 +48036,7 @@ async function run() {
       let releaseId;
       let publishRelease = false;
       let newlyCreatedReleaseUrl;
+      let draftReleaseToDeleteOnFailure = null;
       switch (actionEnvironment.kind) {
         case 'attachZipToRelease':
           releaseId = actionEnvironment.releaseId;
@@ -48036,7 +48058,7 @@ async function run() {
             );
           }
           const releaseResponse = await client.rest.repos.createRelease(createReleaseRequestBody);
-          releaseId = releaseResponse.data.id;
+          draftReleaseToDeleteOnFailure = releaseId = releaseResponse.data.id;
           newlyCreatedReleaseUrl = releaseResponse.data.html_url;
           console.log(`Draft release created (ID: ${releaseId})`);
           if (args.publishRelease) {
@@ -48047,39 +48069,47 @@ async function run() {
         default:
           throw new Error(`Unsupported environment kind '${actionEnvironment.kind}'`);
       }
-      if (args.verbose) {
-        console.log(
-          `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
-        );
-      }
-      await client.rest.repos.uploadReleaseAsset({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        release_id: releaseId,
-        headers: {
-          'content-type': 'application/zip',
-        },
-        name: zipFilename,
-        data: zipFileBytes,
-      });
-      console.log('ZIP file attached to release');
-      if (publishRelease) {
-        const updateReleaseRequestBody = {
+      try {
+        if (args.verbose) {
+          console.log(
+            `Attaching ZIP file '${zipFilename}' (${zipFileSize} bytes) to release (ID: ${releaseId}) on repository '${context.repo.owner}/${context.repo.repo}'...`,
+          );
+        }
+        await client.rest.repos.uploadReleaseAsset({
           owner: context.repo.owner,
           repo: context.repo.repo,
           release_id: releaseId,
-          draft: false,
-          prerelease: actionEnvironment.prerelease,
-          make_latest: actionEnvironment.prerelease ? 'false' : 'true',
-        };
-        if (args.verbose) {
-          console.log(
-            `Publishing release (ID: ${releaseId}) with:\n${JSON.stringify(updateReleaseRequestBody, null, 2)}`,
-          );
+          headers: {
+            'content-type': 'application/zip',
+          },
+          name: zipFilename,
+          data: zipFileBytes,
+        });
+        console.log('ZIP file attached to release');
+        if (publishRelease) {
+          const updateReleaseRequestBody = {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            release_id: releaseId,
+            draft: false,
+            prerelease: actionEnvironment.prerelease,
+            make_latest: actionEnvironment.prerelease ? 'false' : 'true',
+          };
+          if (args.verbose) {
+            console.log(
+              `Publishing release (ID: ${releaseId}) with:\n${JSON.stringify(updateReleaseRequestBody, null, 2)}`,
+            );
+          }
+          const updatedRelease = await client.rest.repos.updateRelease(updateReleaseRequestBody);
+          newlyCreatedReleaseUrl = updatedRelease.data.html_url;
+          console.log('Release published');
         }
-        const updatedRelease = await client.rest.repos.updateRelease(updateReleaseRequestBody);
-        newlyCreatedReleaseUrl = updatedRelease.data.html_url;
-        console.log('Release published');
+        draftReleaseToDeleteOnFailure = null;
+      } catch (error) {
+        if (draftReleaseToDeleteOnFailure !== null) {
+          await deleteRelease(client, draftReleaseToDeleteOnFailure);
+        }
+        throw error;
       }
       if (newlyCreatedReleaseUrl) {
         await summary
